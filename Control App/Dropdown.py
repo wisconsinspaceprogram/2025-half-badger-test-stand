@@ -1,0 +1,48 @@
+import pygame
+
+# Colors
+WHITE = (255, 255, 255)
+GRAY = (200, 200, 200)
+BLACK = (0, 0, 0)
+BLUE = (100, 100, 255)
+
+class Dropdown:
+    """ A simple dropdown menu inside a draggable rectangle """
+
+    def __init__(self, x, y, width, height, font_height, options):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.width = width
+        self.height = height
+        self.options = options
+        self.selected = options[0]
+        self.expanded = False
+        self.font_height = font_height
+        self.font = pygame.font.Font(None, font_height)
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, GRAY if self.expanded else WHITE, self.rect, border_radius=5)
+        pygame.draw.rect(surface, BLACK, self.rect, 1)
+        text = self.font.render(self.selected, True, BLACK)
+        surface.blit(text, (self.rect.x + 5, self.rect.y + 5))
+
+        if self.expanded:
+            for i, option in enumerate(self.options):
+                option_rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.rect.height, self.rect.width, self.rect.height)
+                pygame.draw.rect(surface, WHITE, option_rect, border_radius=5)
+                pygame.draw.rect(surface, BLACK, option_rect, 1)
+                text = self.font.render(option, True, BLACK)
+                surface.blit(text, (option_rect.x + 5, option_rect.y + 5))
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.expanded = not self.expanded
+            elif self.expanded:
+                for i, option in enumerate(self.options):
+                    option_rect = pygame.Rect(self.rect.x, self.rect.y + (i + 1) * self.rect.height, self.rect.width, self.rect.height)
+                    if option_rect.collidepoint(event.pos):
+                        self.selected = option
+                        self.expanded = False
+                        break
+                else:
+                    self.expanded = False

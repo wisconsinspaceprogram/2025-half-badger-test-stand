@@ -29,6 +29,7 @@ class Button:
         #self.label.draw(surface)  # Draw the label next to the button
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.rect.collidepoint(event.pos):
                 self.is_on = not self.is_on  # Toggle the button state
+                

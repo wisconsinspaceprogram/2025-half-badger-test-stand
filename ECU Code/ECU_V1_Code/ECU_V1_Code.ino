@@ -10,17 +10,20 @@
 
 // Sensor Config Information
 // Sensor ID list:
+// -3: command value - if applicable
+// -2: time since last proper command
 // -1: time since last state change
 // 0-3: PT1-4
 // 4-7: TC1-4
+// 8-23: Extra Data1-16
 
 // PT List, need to list Min, Max pressure, Min, Max Output, attatchment pins, names
 float ptPressureRange[4][2] = {{0, 1000}, {0, 100}, {0, 100}, {0, 100}};
 float ptOutputRange[4][2] = {{0.5, 4.5}, {0, 5}, {0, 5}, {0, 5}};
-int ptPins[4] = {0, 1, 2, 3};
+uint8_t ptPins[4] = {0, 1, 2, 3};
 float ptValue[4] = {0.0, 0.0, 0.0, 0.0};
 char ptNames[4][12] = {"PT1", "PT2", "PT3", "PT4"};
-int ptIds[4] = {0, 1, 2, 3};
+uint8_t ptIds[4] = {0, 1, 2, 3};
 
 // TC List, need to store TC Address, name, type
 uint8_t tcAddress[4] = {0x61, 0x62, 0x63, 0x64};
@@ -28,10 +31,11 @@ char tcNames[4][12] = {"TC1", "TC2", "TC3", "TC4"};
 char tcType[4] = {'T', 'K', 'K', 'K'};
 float tcHotValue[4] = {0.0, 0.0, 0.0, 0.0};
 float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
-int tcIds[4] = {4, 5, 6, 7};
+uint8_t tcIds[4] = {4, 5, 6, 7};
 
 // Placeholders for additional data that any other system can pass in
-int extraDataIds[16] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+char extraDataNames[16][12] = {"-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"};
+uint8_t extraDataIds[16] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
 float extraDataValues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // Registers
@@ -40,24 +44,24 @@ float extraDataValues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #define REG_THERMOCOUPLE_CFG   0x05 // Thermocouple Configuration Register
 
 // State Tree info
-#define NUM_STATES 100
+#define NUM_STATES 50
 #define STATE_CHANGES_PER_STATE 3
-#define SENSORS_PER_STATE_CHANGE 6
+#define SENSORS_PER_STATE_CHANGE 3
 
 // State numbers
-int stateNumber[NUM_STATES] = {0, 1};  //Just numbering the states here for consistency and not having to deal with index values
+uint8_t stateNumber[NUM_STATES] = {0, 1};  //Just numbering the states here for consistency and not having to deal with index values
 
 // Defines each condition as either using > or < for the sensor threshold comparison
-int stateChangeOperation[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{1}}, {{-1}}}; //[[-1, 1, 1, 1]..] 1=sensor is > value, -1 = sensor is < value
+uint8_t stateChangeOperation[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{1}}, {{0}}}; //[[-1, 1, 1, 1]..] 1=sensor is > value, 0 = sensor is < value
 
 // Defines the sensor ID value to be used in the comparision
-int stateChangeSensorId[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{4}}, {{4}}};  // Sensor ID to be used
+uint8_t stateChangeSensorId[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{4}}, {{4}}};  // Sensor ID to be used
 
 // Defines the sensor threshold value to be considered
 float stateChangeValue[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{28}}, {{26}}}; // Threshold value
 
 // Defines how many sensors in each state change option need to be active to move. Can effectively be used to say all/or for conditions
-int stateChangeNumSensors[NUM_STATES][STATE_CHANGES_PER_STATE] = {{1, 0, 0}, {1, 0, 0}};
+uint8_t stateChangeNumSensors[NUM_STATES][STATE_CHANGES_PER_STATE] = {{1, 0, 0}, {1, 0, 0}};
 
 //Current time information
 double t = 0.0;
@@ -66,7 +70,9 @@ double lastStateChange = 0.0;
 //Current state
 int state = 0;
 
-
+// Incoming messagse serial que
+char partialCommand[64] = "";
+int partialCommandIndex = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -86,15 +92,36 @@ void setup() {
   }
 
   Serial.println("Start");
-
 }
-
-
-
-
 
 void loop() {
   //Read for input commands
+  // '{' => start command
+  // '}' => end command
+  char command[64] = "";
+
+  while(Serial.available()){
+    char nextChar = char(Serial.read());
+    if(nextChar == '{'){
+      partialCommandIndex = 0;
+    } else if(nextChar == '}'){
+      for(int i = 0; i < (sizeof(partialCommand) / sizeof(partialCommand[0])); i++){
+        if(i < partialCommandIndex){
+          command[i] = partialCommand[i];
+        } else {
+          command[i] = '-';
+        }
+      }
+    } else {
+      partialCommand[partialCommandIndex] = nextChar;
+
+      partialCommandIndex += 1;
+      if(partialCommandIndex > 63){
+        partialCommandIndex = 0;
+      }
+
+    }
+  }
 
   //Execute on those commands - Move to new state w/ state config data, update sensor config, update state tree, dump all data out
 

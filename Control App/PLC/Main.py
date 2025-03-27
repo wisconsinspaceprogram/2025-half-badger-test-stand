@@ -21,7 +21,7 @@ WHITE = (255, 255, 255)
 SENSOR_OPTIONS = ["-", "PT_N", "PT_LOX", "PT_LOX_CAV", "PT_IPA", "PT_TCA", "TC_N", "TC_LOX", 
                   "TC_LOX_CAV", "TC_TCA1", "TC_TCA2", "TC_IPA", "T_STATE", "T_COM", "COMMAND"]
 
-OPERATION_OPTIONS = ["-", "<", ">"]
+OPERATION_OPTIONS = ["-", "<", ">", "="]
 
 
 canvas_dragging = False

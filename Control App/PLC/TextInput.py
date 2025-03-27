@@ -16,13 +16,12 @@ class TextInput:
         self.height = height
         self.active = False
         #self.font_height = font_height
-        self.fonts = fonts
         self.font = font#pygame.font.Font(None, font_height)
 
-    def draw(self, surface):
+    def draw(self, surface, fonts):
         pygame.draw.rect(surface, WHITE if self.active else GRAY, self.rect, border_radius=5)
         pygame.draw.rect(surface, BLACK, self.rect, 1)
-        text_surface = self.fonts[self.font].render(self.text, True, BLACK)
+        text_surface = fonts[self.font].render(self.text, True, BLACK)
         surface.blit(text_surface, (self.rect.x + 5, self.rect.y + 5))
 
     def handle_event(self, event):

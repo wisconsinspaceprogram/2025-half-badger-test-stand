@@ -1,13 +1,16 @@
 import pygame
+import easygui
+import dill
+import time
 from Node import Node
 
 # Initialize pygame
 pygame.init()
 
 # Screen setup
-WIDTH, HEIGHT = 1600, 900
+WIDTH, HEIGHT = 1400, 750
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Draggable Rectangle with Dropdowns")
+pygame.display.set_caption("Half Badger GUI PLC")
 
 # # Colors
 WHITE = (255, 255, 255)
@@ -16,7 +19,7 @@ WHITE = (255, 255, 255)
 # BLUE = (200, 200, 255)
 
 SENSOR_OPTIONS = ["-", "PT_N", "PT_LOX", "PT_LOX_CAV", "PT_IPA", "PT_TCA", "TC_N", "TC_LOX", 
-                  "TC_LOX_CAV", "TC_TCA1", "TC_TCA2", "TC_IPA", "T_STATE", "T_COM"]
+                  "TC_LOX_CAV", "TC_TCA1", "TC_TCA2", "TC_IPA", "T_STATE", "T_COM", "COMMAND"]
 
 OPERATION_OPTIONS = ["-", "<", ">"]
 
@@ -48,7 +51,6 @@ def update_canvas(event, nodes):
         canvas_drag_start = [event.pos[0], event.pos[1]]
     elif event.type == pygame.MOUSEBUTTONUP:
         canvas_dragging = False
-        #draw_all(scale)
     elif event.type == pygame.MOUSEMOTION and canvas_dragging:
         delta_x = event.pos[0] - canvas_drag_start[0]
         delta_y = event.pos[1] - canvas_drag_start[1]
@@ -60,7 +62,6 @@ def update_canvas(event, nodes):
 
         for node in nodes:  
           node.move(delta_x, delta_y)
-        #draw_all(scale)
 
     elif event.type == pygame.MOUSEWHEEL:
         prev_scale = scale
@@ -79,8 +80,11 @@ def update_canvas(event, nodes):
         font_medium = pygame.font.Font(None, int(16*scale))
         font_large = pygame.font.Font(None, int(20*scale))
         fonts = [font_small, font_medium, font_large]
-        #draw_all(scale)
-        
+  
+      
+
+# Open a file save dialog (to select both directory and filename)
+# file_path = easygui.filesavebox(title="Select File to Save Data", default="*.txt")
 
  
 
@@ -113,6 +117,50 @@ while running:
               new_node = Node(mouse[0], mouse[1], SENSOR_OPTIONS, OPERATION_OPTIONS, fonts)
               new_node.draw(screen, scale, fonts)
               nodes.append(new_node)
+          
+          if event.key == pygame.K_s:
+              save_path = easygui.filesavebox(title="Select File to Save State Data to", default="")
+
+              state_numbers = []
+              state_change_operations = []
+              state_change_sensor_id = []
+              state_change_threshold_values = []
+              state_change_num_sensors = []
+
+              if save_path != None:
+                for node in nodes:
+                    state_numbers.append(node.get_state_number())
+                    state_change_operations.append(node.get_operations())
+                    state_change_sensor_id.append(node.get_sensor_ids())
+                    state_change_threshold_values.append(node.get_thresholds())
+                    state_change_num_sensors.append(node.get_num_sensors())
+
+
+                    #process out invalid stuff and get mad if there are any issues!!!
+
+
+                out_dict = {'numbers': state_numbers, 'operations':state_change_operations, 'ids':state_change_sensor_id, 
+                                'thresholds':state_change_threshold_values, 'num_sensors':state_change_num_sensors, 'nodes':nodes}
+                    
+                if not save_path.endswith(".pkl"):
+                   save_path += '.pkl'
+
+                with open(save_path, 'wb') as pickle_file:
+                  dill.dump(out_dict, pickle_file)
+                
+                print("Saved as " + save_path)
+              else:
+                print("Bad file path, DID NOT SAVE!!!")
+          
+          if event.key == pygame.K_o:
+            open_path = easygui.fileopenbox("State Data to open")
+
+            if open_path != None:
+              with open(open_path, "rb") as file:
+                loaded_data = dill.load(file)
+                nodes = loaded_data["nodes"]
+
+              #print(save_path)
 
         #Move screen in no nodes were pressed
         if not node_hit:
@@ -124,6 +172,6 @@ while running:
     pygame.display.flip()
     clock.tick(60)
 
-    print(len(nodes))
+    #print(len(nodes))
 
 pygame.quit()

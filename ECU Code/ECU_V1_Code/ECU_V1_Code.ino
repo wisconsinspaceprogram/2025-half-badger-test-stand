@@ -30,6 +30,10 @@ float tcHotValue[4] = {0.0, 0.0, 0.0, 0.0};
 float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
 int tcIds[4] = {4, 5, 6, 7};
 
+// Placeholders for additional data that any other system can pass in
+int extraDataIds[16] = {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+float extraDataValues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
 // Registers
 #define REG_HOT_JUNCTION_TEMP 0x00  // Hot Junction Temperature Register
 #define REG_COLD_JUNCTION_TEMP 0x02 // Cold Junction Temperature Register
@@ -37,23 +41,23 @@ int tcIds[4] = {4, 5, 6, 7};
 
 // State Tree info
 #define NUM_STATES 100
-#define STATE_CHANGES_PER_STATE 4
-#define SENSORS_PER_STATE_CHANGE 16
+#define STATE_CHANGES_PER_STATE 3
+#define SENSORS_PER_STATE_CHANGE 6
 
 // State numbers
-int stateNumbers[NUM_STATES] = {0, 1};  //Just numbering the states here for consistency and not having to deal with index values
+int stateNumber[NUM_STATES] = {0, 1};  //Just numbering the states here for consistency and not having to deal with index values
 
 // Defines each condition as either using > or < for the sensor threshold comparison
 int stateChangeOperation[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{1}}, {{-1}}}; //[[-1, 1, 1, 1]..] 1=sensor is > value, -1 = sensor is < value
 
 // Defines the sensor ID value to be used in the comparision
-int stateChangeSensorId[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{4}}, {{4}}};;  // Sensor ID to be used
+int stateChangeSensorId[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{4}}, {{4}}};  // Sensor ID to be used
 
 // Defines the sensor threshold value to be considered
-float stateChangeValue[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{28}}, {{26}}};; // Threshold value
+float stateChangeValue[NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {{{28}}, {{26}}}; // Threshold value
 
 // Defines how many sensors in each state change option need to be active to move. Can effectively be used to say all/or for conditions
-int stateChangeNumSensors[NUM_STATES][STATE_CHANGES_PER_STATE] = {{1}, {1}};
+int stateChangeNumSensors[NUM_STATES][STATE_CHANGES_PER_STATE] = {{1, 0, 0}, {1, 0, 0}};
 
 //Current time information
 double t = 0.0;

@@ -38,7 +38,7 @@ class Node:
         self.label_loc.append((5,8))
 
         self.texts.append(TextInput(0,0,fonts, 2,30,17))
-        self.text_loc.append((50, 5))
+        self.text_loc.append((50, 5))   
 
         # Valve buttons
         # Column 1
@@ -199,13 +199,13 @@ class Node:
     def draw(self, surface, scale, fonts):
         self.rect.height = self.height * scale
         self.rect.width = self.width * scale
-        self.fonts = fonts
+        #self.fonts = fonts
         pygame.draw.rect(surface, BLUE, self.rect, border_radius=10)
 
         # setting the locations of everything in the node
         if len(self.dropdowns) > 0:
           for i, dropdown in enumerate(self.dropdowns):
-              dropdown.fonts = self.fonts
+              #dropdown.fonts = self.fonts
               dropdown.rect.x = self.rect.x + self.dropdown_loc[i][0] * scale
               dropdown.rect.y = self.rect.y + self.dropdown_loc[i][1] * scale
               dropdown.rect.height = dropdown.height * scale
@@ -214,21 +214,21 @@ class Node:
 
         if len(self.texts) > 0:
           for i, text in enumerate(self.texts):
-              text.fonts = self.fonts
+              #text.fonts = self.fonts
               text.rect.x = self.rect.x + self.text_loc[i][0] * scale
               text.rect.y = self.rect.y + self.text_loc[i][1] * scale
               text.rect.height = text.height * scale
               text.rect.width = text.width * scale
               text.rect.width = text.width * scale
               #text.font = pygame.font.Font(None, int(text.font_height * scale))
-              text.draw(surface)
+              text.draw(surface, fonts)
         
         if len(self.labels) > 0:
           for i, label in enumerate(self.labels):
-              label.fonts = self.fonts
+              #label.fonts = self.fonts
               label.x = self.rect.x + self.label_loc[i][0] * scale
               label.y = self.rect.y + self.label_loc[i][1] * scale
-              label.draw(surface)
+              label.draw(surface, fonts)
               #label.font = pygame.font.Font(None, int(label.font_height * scale))
         
         if len(self.buttons) > 0:
@@ -242,11 +242,11 @@ class Node:
         #double drawing the expanded dropdown so it's always on top
         highlight_drop = None
         for dropdown in self.dropdowns:
-            dropdown.draw(surface)
+            dropdown.draw(surface, fonts)
             if dropdown.expanded:
                 highlight_drop = dropdown
         if highlight_drop != None:
-            highlight_drop.draw(surface)
+            highlight_drop.draw(surface, fonts)
 
     def handle_event(self, event):
         hit = False
@@ -287,3 +287,52 @@ class Node:
     def move(self, delta_x, delta_y):
         self.rect.x += delta_x
         self.rect.y += delta_y
+
+    def get_state_number(self):
+        return self.texts[0].text
+    
+    def get_operations(self):
+        operations = []
+
+        #Indexes of the input fields that need to be gone between
+        sets = [[1, 3, 5, 7, 9, 11], [13, 15, 17, 19, 21, 23], [25, 27, 29, 31, 33, 35]]
+
+        for set in sets:
+          set_ops = []
+          for index in set:
+              set_ops.append(self.dropdowns[index].selected)
+              #set_ops.append(set[0] + op)
+          operations.append(set_ops)
+        return operations
+    
+    def get_sensor_ids(self):
+        ids = []
+
+        indexes = [[0, 2, 4, 6, 8, 10], [12, 14, 16, 18, 20, 22], [24, 26, 28, 30, 32, 34]]
+
+        for set in indexes:
+            set_ids = []
+            for index in set:
+                set_ids.append(self.dropdowns[index].selected)
+            ids.append(set_ids)
+        return ids
+    
+    def get_thresholds(self):
+        thresholds = []
+        indexes = [[2, 4, 6, 8, 10, 12], [15, 17, 19, 21, 23, 25], [28, 30, 32, 34, 36, 38]]
+
+        for set in indexes:
+            set_thresholds = []
+            for index in set:
+                set_thresholds.append(self.texts[index].text)
+            thresholds.append(set_thresholds)
+
+        return thresholds
+    
+    def get_num_sensors(self):
+        trigger_cnt = []
+        indexes = [1, 14, 27]
+
+        for index in indexes:
+            trigger_cnt.append(self.texts[index].text)
+        return trigger_cnt

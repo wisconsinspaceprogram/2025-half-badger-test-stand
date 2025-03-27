@@ -15,8 +15,8 @@ class Label:
         self.y = y
         #self.font_height = font_height
         self.font = font
-        self.fonts = fonts#pygame.font.Font(None, font_height)
+        #self.fonts = fonts#pygame.font.Font(None, font_height)
 
-    def draw(self, surface):
-        text_surface = self.fonts[self.font].render(self.text, True, BLACK)
+    def draw(self, surface, fonts):
+        text_surface = fonts[self.font].render(self.text, True, BLACK)
         surface.blit(text_surface, (self.x, self.y))

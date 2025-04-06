@@ -7,7 +7,7 @@ GRAY = (200, 200, 200)
 BLACK = (0, 0, 0)
 BLUE = (100, 100, 255)
 GREEN = (0, 255, 0)
-RED = (255, 0, 0)
+RED = (255, 0, 0, 50)
 
 class Button:
     """ A simple on/off toggle button or checkbox """
@@ -23,7 +23,7 @@ class Button:
     def draw(self, surface):
         # Draw the button with green if on, red if off
         color = GREEN if self.is_on else RED
-        pygame.draw.rect(surface, color, self.rect, border_radius=5)
+        pygame.draw.rect(surface, color, self.rect, border_radius=2)
         #pygame.draw.rect(surface, BLACK, self.rect, 2)  # Button border
         #self.label.text = "On" if self.is_on else "Off"  # Update the label text
         #self.label.draw(surface)  # Draw the label next to the button

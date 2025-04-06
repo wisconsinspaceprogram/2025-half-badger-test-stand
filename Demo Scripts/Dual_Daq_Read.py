@@ -21,71 +21,71 @@ U6_Read_Buffer = []
 T7_Read_Buffer = []
 
 # U6 =======================================
-# initialize device
-d = u6.U6()
+# # initialize device
+# d = u6.U6()
 
-# For applying the proper calibration to readings.
-d.getCalibrationData()
+# # For applying the proper calibration to readings.
+# d.getCalibrationData()
 
 
 
-#CJC functions
-def getCJ(d):
-    return d.getAIN(14) * -92.6 + 467.6 - 273.15
+# #CJC functions
+# def getCJ(d):
+#     return d.getAIN(14) * -92.6 + 467.6 - 273.15
 
-def getCJMidStream(d):
-    d.streamStop()
+# def getCJMidStream(d):
+#     d.streamStop()
     
-    CJ = d.getAIN(14) * -92.6 + 467.6 - 273.15
+#     CJ = d.getAIN(14) * -92.6 + 467.6 - 273.15
 
-    d.streamStart()
+#     d.streamStart()
 
-    return CJ
+#     return CJ
 
-d.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[48,48,48], SettlingFactor=1, ResolutionIndex=1, ScanFrequency=100)
+# d.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[48,48,48], SettlingFactor=1, ResolutionIndex=1, ScanFrequency=100)
 
-CJC_Temp = 20
+# CJC_Temp = 20
 
-def readU6():
-    global CJC_Temp
-    global U6_Read_Buffer
+# def readU6():
+#     global CJC_Temp
+#     global U6_Read_Buffer
 
-    try:
-       d.streamStop()
-    except:
-       pass
+#     try:
+#        d.streamStop()
+#     except:
+#        pass
     
-    CJC_Temp = d.getAIN(14) * -92.6 + 467.6 - 273.15
+#     CJC_Temp = d.getAIN(14) * -92.6 + 467.6 - 273.15
 
-    try:
-      print("Start stream")
-      d.streamStart()
-      print("U6 Started")
+#     try:
+#       print("Start stream")
+#       d.streamStart()
+#       print("U6 Started")
 
-      for r in d.streamData():
-          if r is not None:
+#       for r in d.streamData():
+#           if r is not None:
               
-              if datetime.now().second % 6 == 0:
-                CJC_Temp = getCJMidStream(d)
+#               if datetime.now().second % 6 == 0:
+#                 CJC_Temp = getCJMidStream(d)
 
-              temp = round(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40, 2)
-              #print("U6: " + str(temp) + "C")#, CJC_Temp + np.mean(r["AIN1"]) * 1e6 / 40, CJC_Temp + np.mean(r["AIN2"]) * 1e6 / 40, CJC_Temp)
+#               temp = round(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40, 2)
+#               #print("U6: " + str(temp) + "C")#, CJC_Temp + np.mean(r["AIN1"]) * 1e6 / 40, CJC_Temp + np.mean(r["AIN2"]) * 1e6 / 40, CJC_Temp)
 
-              U6_Read_Buffer = U6_Read_Buffer + r["AIN0"]
-              #U6_Read_Buffer.append(r["AIN0"])
+#               U6_Read_Buffer = U6_Read_Buffer + r["AIN0"]
+#               #U6_Read_Buffer.append(r["AIN0"])
 
-              #out = str(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40) + "\n"
-              #s.write(out.encode())
+#               #out = str(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40) + "\n"
+#               #s.write(out.encode())
 
-          else:
-              print("No data ; %s" % datetime.now())
+#           else:
+#               print("No data ; %s" % datetime.now())
 
-    except:
-        print("".join(i for i in traceback.format_exc()))
-    finally:
-        d.streamStop()
-        print("U6 Stream stopped.\n")
-        d.close()
+#     except:
+#         print("".join(i for i in traceback.format_exc()))
+#     finally:
+#         d.streamStop()
+#         print("U6 Stream stopped.\n")
+#         d.close()
 
 
 # T7 ======================================
@@ -164,26 +164,27 @@ def readData():
     #print(U6_Read_Buffer)
 
     #round(voltToPressure(np.mean(T7_Read_Buffer), 1000, 0.5, 4.5)
-    print("U6:", round(voltToTempTypeK(CJC_Temp, np.mean(U6_Read_Buffer)), 2), len(U6_Read_Buffer), "T7", round(voltToPressure(np.mean(T7_Read_Buffer), 1000, 0.5, 4.5), 2), len(T7_Read_Buffer))
+    #print("U6:", round(voltToTempTypeK(CJC_Temp, np.mean(U6_Read_Buffer)), 2), len(U6_Read_Buffer), "T7", round(voltToPressure(np.mean(T7_Read_Buffer), 1000, 0.5, 4.5), 2), len(T7_Read_Buffer))
+    print("T7", round(voltToPressure(np.mean(T7_Read_Buffer), 1000, 0.5, 4.5), 2), len(T7_Read_Buffer))
     #print("U6:", round(voltToTempTypeK(CJC_Temp, np.mean(U6_Read_Buffer)), 2), len(U6_Read_Buffer), "T7", round(np.mean(T7_Read_Buffer), 2), len(T7_Read_Buffer))
     #print()
 
-    U6_Read_Buffer = []
+    #U6_Read_Buffer = []
     T7_Read_Buffer = []
 
-    time.sleep(1)
+    time.sleep(0.5)
 
 #readU6()
 #readT7()
 
-thread_u6 = threading.Thread(target=readU6)
+# thread_u6 = threading.Thread(target=readU6)
 thread_t7 = threading.Thread(target=readT7)
 thread_read = threading.Thread(target=readData)
 
-thread_u6.start()
+# thread_u6.start()
 thread_t7.start()
 thread_read.start()
 
-thread_u6.join()
+# thread_u6.join()
 thread_t7.join()
 thread_read.join()

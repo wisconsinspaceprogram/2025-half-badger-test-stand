@@ -1,12 +1,15 @@
 import math
+import os
 import re
+import sys
 import serial
 import threading
 import time
 from labjack import ljm
-from thermocouples_reference import thermocouples
+#from thermocouples_reference import thermocouples
 from statistics import mean
 from datetime import datetime
+from queue import Queue, Empty
 
 
 # RPI Command list, these commands are not passed to the ECU if detected, only valid codes for the ECU are transmitted
@@ -25,8 +28,8 @@ from datetime import datetime
 # Dump saved datafile - not needed yet but would be nice eventually, can retrive data from ethernet
 # {-5}
 
-radio_port = "COM6"
-ecu_port = "COM7"
+radio_port = "/dev/ttyACM0"#"COM6"
+ecu_port = "/dev/ttyACM1"#"COM7"
 
 radio_baud = 115200
 ecu_baud = 115200
@@ -47,13 +50,15 @@ daq_pt_pressure_ranges = [(0, 1500)] * 14
 daq_pt_voltage_ranges = [(0, 10)] * 14
 
 #TC refernce 
-tc_k_reference = thermocouples['K']
-tc_t_reference = thermocouples['T']
+# tc_k_reference = thermocouples['K']
+# tc_t_reference = thermocouples['T']
 
 # Incoming command buffer full of only commands that are enclosed by {}
-command_buffer = []
+# command_buffer = []
 ecu_command_buffer = []
 radio_out_buffer = []
+incoming_queue = Queue()
+outgoing_queue = Queue()
 
 # Buffers for the DAQ readings
 T7_Read_Buffer = []
@@ -86,7 +91,7 @@ def configure_T7():
       info = ljm.getHandleInfo(T7)
       numAddresses = len(daq_channel_ids) + 1
       aScanList = ljm.namesToAddresses(numAddresses, daq_channel_ids + ["AIN14"])[0]
-      scanRate = 100
+      scanRate = 25
       scansPerRead = scanRate * 2 # Return stream data every 0.5s
       # Ensure triggered stream is disabled.
       ljm.eWriteName(T7, "STREAM_TRIGGER_INDEX", 0)
@@ -99,7 +104,7 @@ def configure_T7():
       
       aRangeValues = []
       for sensor in daq_sensor_types:
-         aRangeValues.append(1 if (sensor == "TC_K" or sensor == "TC_T") else 10.0)
+         aRangeValues.append(0.1 if (sensor == "TC_K" or sensor == "TC_T") else 10.0)
       aRangeValues.append(10) #CJC Ain14 range
       aRangeValues.append(0) #Stream resolution index
 
@@ -169,9 +174,9 @@ def proccess_daq():
           try:
             if daq_sensor_types[i_sensor] == "TC_K":
               #print((sample[i_sensor]))
-              processed_sample[i_sensor] = tc_k_reference.inverse_CmV(mean(sample[i_sensor])*1000, Tref=processed_sample[14])
+              processed_sample[i_sensor] = 40 * mean(sample[i_sensor])*1000 / 10**3 + processed_sample[14]#tc_k_reference.inverse_CmV(mean(sample[i_sensor])*1000, Tref=processed_sample[14])
             elif daq_sensor_types[i_sensor] == "TC_T":
-              processed_sample[i_sensor] = tc_t_reference.inverse_CmV(mean(sample[i_sensor])*1000, Tref=processed_sample[14])
+              processed_sample[i_sensor] = 20 * mean(sample[i_sensor])*1000 / 10**3 + processed_sample[14]#mean(sample[i_sensor])*1000#tc_t_reference.inverse_CmV(mean(sample[i_sensor])*1000, Tref=processed_sample[14])
             elif daq_sensor_types[i_sensor] == "PT":
               pmin = daq_pt_pressure_ranges[i_sensor][0]
               pmax = daq_pt_pressure_ranges[i_sensor][1]
@@ -198,65 +203,69 @@ def proccess_daq():
 #     return delta.total_seconds()
 
 # Function to read the command including the {} characters
-command_threshold = 1
+# command_threshold = 1
 
-def read_command(ser):
-    # global last_radio_rx
-    # global command_threshold
+# def read_command(ser):
+#     # global last_radio_rx
+#     # global command_threshold
 
-    buffer = ""
-    while True:
-      if ser.in_waiting > 0:
-          data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+#     buffer = ""
+#     while True:
+#       if ser.in_waiting > 0:
+#           data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
           
-          if data == "{":
-              buffer = ""
+#           if data == "{":
+#               buffer = ""
 
-          buffer += data
-          while '{' in buffer and '}' in buffer:
-              start = buffer.find('{')
-              end = buffer.find('}', start)
-              if end != -1 and end > start:
-                  command = buffer[start:end+1]  # Include the {} in the command
-                  buffer = buffer[end+1:]
-                  # if command.startswith("{0,"):
-                  #    try:
-                  #     command_threshold = command[3]
-                  #    except:
-                  #       command_threshold = 1
-                  # else:
-                  command_buffer.append(command)
-                  # last_radio_rx = seconds_since_midnight()
-                  #print("NEW_COMMAND")command_buffer)
-                  break
+#           buffer += data
+#           while '{' in buffer and '}' in buffer:
+#               start = buffer.find('{')
+#               end = buffer.find('}', start)
+#               if end != -1 and end > start:
+#                   command = buffer[start:end+1]  # Include the {} in the command
+#                   buffer = buffer[end+1:]
+#                   # if command.startswith("{0,"):
+#                   #    try:
+#                   #     command_threshold = command[3]
+#                   #    except:
+#                   #       command_threshold = 1
+#                   # else:
+#                   command_buffer.append(command)
+#                   # last_radio_rx = seconds_since_midnight()
+#                   #print("NEW_COMMAND")command_buffer)
+#                   break
               
 def read_command_ecu():
-    buffer = ""
-    while True:
-      if ecu_serial.in_waiting > 0:
-          data = ecu_serial.read(ecu_serial.in_waiting).decode('utf-8', errors='ignore')
-          
-          if data == "{":
-              buffer = ""
-
-          buffer += data
-          while '{' in buffer and '}' in buffer:
-              start = buffer.find('{')
-              end = buffer.find('}', start)
-              if end != -1 and end > start:
-                  command = buffer[start:end+1]  # Include the {} in the command
-                  buffer = buffer[end+1:]
-                  ecu_command_buffer.append(command)
-                  break
-
-# Function to start the reading process in a background thread
-def start_reading_radio():
-    global radio_connected
+    global ecu_connected
     try:
-        thread = threading.Thread(target=read_command, args=(radio_serial,), daemon=True)
-        thread.start()
-    except serial.SerialException as e:
-        radio_connected = False
+      buffer = ""
+      while True:
+        if ecu_serial.in_waiting > 0:
+            data = ecu_serial.read(ecu_serial.in_waiting).decode('utf-8', errors='ignore')
+            
+            if data == "{":
+                buffer = ""
+
+            buffer += data
+            while '{' in buffer and '}' in buffer:
+                start = buffer.find('{')
+                end = buffer.find('}', start)
+                if end != -1 and end > start:
+                    command = buffer[start:end+1]  # Include the {} in the command
+                    buffer = buffer[end+1:]
+                    ecu_command_buffer.append(command)
+                    break
+    except:
+       ecu_connected = False
+
+# # Function to start the reading process in a background thread
+# def start_reading_radio():
+#     global radio_connected
+#     try:
+#         thread = threading.Thread(target=read_command, args=(radio_serial,), daemon=True)
+#         thread.start()
+#     except serial.SerialException as e:
+#         radio_connected = False
 
 def start_reading_ecu():
     global ecu_connected
@@ -266,26 +275,93 @@ def start_reading_ecu():
     except serial.SerialException as e:
         ecu_connected = False
 
-def radio_send(command):
-    global radio_connected
-    #print(command)
-    if radio_connected:
-      # cur_time = seconds_since_midnight()
-      # start_wait_time = cur_time
-      # last_send_time = last_radio_rx
+# def radio_send(command):
+#     global radio_connected
+#     #print(command)
+#     if radio_connected:
+#       # cur_time = seconds_since_midnight()
+#       # start_wait_time = cur_time
+#       # last_send_time = last_radio_rx
 
-      # while ((cur_time - last_send_time) < 0.2 and (cur_time - start_wait_time) < 2):
-      #    print("WAITING")
-      #    cur_time = seconds_since_midnight()
-      #    time.sleep(0.01)
+#       # while ((cur_time - last_send_time) < 0.2 and (cur_time - start_wait_time) < 2):
+#       #    print("WAITING")
+#       #    cur_time = seconds_since_midnight()
+#       #    time.sleep(0.01)
 
-      try:
-        #print(command)
-        # print(command)
-        radio_serial.write(command.encode())
-      except:
-        radio_connected = False   
+#       try:
+#         #print(command)
+#         # print(command)
+#         radio_serial.write(command.encode())
+#       except:
+#         radio_connected = False   
+def open_serial():
+    while True:
+        try:
+            ser = serial.Serial(radio_port, radio_baud, timeout=1)
+            print("[Slave] Serial port connected.")
+            return ser
+        except serial.SerialException:
+            print(f"[Slave] Waiting for {radio_port} to be available...")
+            time.sleep(2)
+
+def send(ser, msg):
+    ser.write((msg + '\r\n').encode())
+    time.sleep(0.05)
+
+def slave_thread():
+    #ser = open_serial()
+    last_response = "DATA:READY"  # default response
+
+    try:
+        ser = open_serial()  # Waits and retries until COM port is available
+    except:
+        ser = None
+
+    while True:
+        try:
+            if ser and ser.in_waiting:
+                line = ser.readline().decode(errors='ignore').strip()
+                if line:
+                    print(f"[Slave] Received: {line}")
+                    incoming_queue.put(line)
+
+                    # Basic handling
+                    if line == "{-5}":
+                        send(ser, last_response)
+                    elif line == "ACK":
+                        print("[Slave] ACK received.")
+                    else:
+                        # Custom command
+                        outgoing_queue.put(f"Echo: {line}")
+
+            # Handle outgoing commands (responses)
+            try:
+                msg = outgoing_queue.get_nowait()
+                #print(msg)
+                last_response = f"DATA:{msg}"
+            except Empty:
+                pass
+
+            time.sleep(0.01)
+
+        except serial.SerialException as e:
+            print(f"[Slave] Serial error: {e}. Reconnecting...")
+            try:
+                ser.close()
+            except:
+                pass
+            ser = open_serial()
+      
+            time.sleep(1)
         
+        except Exception as e:
+           print(e)
+        
+        # finally:
+        #   if ser and ser.is_open:
+        #     print("[Slave] Closing serial port.")
+        #     ser.close()
+                    
 def extract_strings(input_str):
     items = input_str.strip('{}').split(',')  # remove both { and } and split
     return items[1:]  # skip the first item (like -1)
@@ -295,6 +371,19 @@ def extract_tuples(input_str):
     tuples = [tuple(map(int, m.split(','))) for m in matches]  # split and convert to int
     return tuples
 
+def restart_program():
+    print("[Python] Restarting...")
+    python = sys.executable
+    os.execv(python, [python] + sys.argv)
+
+threading.Thread(target=slave_thread, daemon=True).start()
+
+def sigfig_round(x, sig):
+    return round(x, sig - int(math.floor(math.log10(abs(x)))) - 1)
+
+last_daq = ""
+
+
 # Main run loop
 if __name__ == "__main__":
     # Setting up continous daq readings - read_T7() will reconnect if the DAQ has disconnected
@@ -303,66 +392,90 @@ if __name__ == "__main__":
 
     while True:
         
-        # Starting the reading of the radio, trying to reconnect if disconnected
-        if not radio_connected or radio_serial == None:
-          try:
-            radio_serial = serial.Serial(radio_port, radio_baud, timeout=2)
-            radio_connected = True
-            start_reading_radio()
-          except:
-            radio_connected = False
+        # # Starting the reading of the radio, trying to reconnect if disconnected
+        # if not radio_connected or radio_serial == None:
+        #   try:
+        #     radio_serial = serial.Serial(radio_port, radio_baud, timeout=2)
+        #     radio_connected = True
+        #     start_reading_radio()
+        #   except:
+        #     radio_connected = False
 
         if not ecu_connected or ecu_serial == None:
             try:
                 ecu_serial = serial.Serial(ecu_port, ecu_baud, timeout=2)
+                #ecu_serial.setDTR(False)
                 ecu_connected = True
                 start_reading_ecu()
             except:
                 ecu_connected = False
+        #print(ecu_connected)
         #print(daq_pt_pressure_ranges, len(command_buffer), command_threshold)
         # Processing the command
-        if len(command_buffer) > 0:
-          for command in command_buffer:
+        while not incoming_queue.empty():
+              command = incoming_queue.get()
+              print(f"[Main] Handling message: {command}")
+
               try:
                 #print("InCOMING:", command)
                 if command[1:2] == "-":
                     #RPI Command
                     if command.startswith("{-1,"):
                       daq_names = extract_strings(command)
+                      outgoing_queue.put("ACK-1")
                     elif command.startswith("{-2,"):
                       daq_sensor_types = extract_strings(command)
+                      outgoing_queue.put("ACK-2")
                     elif command.startswith("{-3"):
                       try:
                         daq_pt_pressure_ranges_raw = extract_tuples(command)
                         if len(daq_pt_pressure_ranges_raw) == 14:
                             daq_pt_pressure_ranges = daq_pt_pressure_ranges_raw
+                            outgoing_queue.put("ACK-3suc")
                       except:
+                        outgoing_queue.put("ACK-3fail")
                         pass
                     elif command.startswith("{-4"):
                       try:
                         daq_pt_voltage_ranges_raw = extract_tuples(command)
                         if len(daq_pt_voltage_ranges_raw) == 14:
                             daq_pt_voltage_ranges = daq_pt_voltage_ranges_raw
+                            outgoing_queue.put("ACK-4suc")
                       except:
+                        outgoing_queue.put("ACK-4fail")
                         pass
                     elif command.startswith("{-5"):
                         sent_commands = []
+                        out = ""
+                        #print("-5")
                         #time.sleep(0.5)
                         for s in range(len(radio_out_buffer)-1,-1,-1):
                           if not (radio_out_buffer[s][1:3] in sent_commands):
-                            radio_send(radio_out_buffer[s])
+                            out += radio_out_buffer[s]
                             sent_commands.append(radio_out_buffer[s][1:3])
+                        #print(out)
+                        outgoing_queue.put(out)
+                        #outgoing_queue.put(last_daq)
+                        #print(last_daq)
+
+                    # elif command.startswith("-11,"):
+                    #    restart_program()
 
                     #print(command)
                     pass
                 elif command[1:2].isdigit():
                     #ECU Command
-                    print("Send to ECU: " + command)
-                    ecu_serial.write(command.encode('utf-8'))
+                    if ecu_connected:
+                      print("Send to ECU: " + command)
+                      
+                      ecu_serial.write(command.encode('utf-8'))
+
+                      # ecu_connected = False
+                      # ecu_serial.close()
                     pass
               except:
                  pass
-          command_buffer = []
+          # command_buffer = []
         
         # if ecu_serial != None:
         #   if ecu_serial.in_waiting > 0:
@@ -372,11 +485,26 @@ if __name__ == "__main__":
         proccess_daq()
         
         for sample in T7_processed_buffer:
-           radio_out_buffer.append("{-7," + ",".join(map(str, sample)) + "}")
+           try:
+              #time.sleep(0.1)
+              out_string = ""
+              for val in sample:
+                 out_string += str(sigfig_round(val, 4))
+                 out_string += ","
+              out_string = out_string[0:-2]
+
+              last_daq = "{-7," + out_string + "}\n"
+              #outgoing_queue.put(last_daq)
+              print(last_daq)
+              # print(out)
+              radio_out_buffer.append(last_daq)
+           except Exception as e:
+              print(e)
+              pass
            #print("{-7," + ",".join(map(str, sample)) + "}")
 
         for ecu_command in ecu_command_buffer:
-           radio_out_buffer.append(ecu_command)
+           radio_out_buffer.append(ecu_command + "\n")
         
         # frameTime = seconds_since_midnight()
         # if (math.floor(frameTime) - math.floor(lastFrameTime)) > 0:
@@ -386,7 +514,7 @@ if __name__ == "__main__":
             # radio_out_buffer = []
         # lastFrameTime = frameTime
 
-        if len(radio_out_buffer) > 100:
+        if len(radio_out_buffer) > 3:
            radio_out_buffer.pop(0)
 
         ecu_command_buffer = []

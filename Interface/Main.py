@@ -10,6 +10,7 @@ from TextInput import TextInput
 from Dropdown import Dropdown
 import serial
 from datetime import datetime
+from queue import Queue, Empty
 
 
 # Port of radio
@@ -21,7 +22,10 @@ radio_serial = None
 
 # Incoming command buffer full of only commands that are enclosed by {}, using "commands" but these
 # will be strictly for data recieving and info purposes
-command_buffer = []
+# command_buffer = []
+
+command_queue = Queue()
+response_queue = Queue()
 
 # lastFrameTime = 0
 
@@ -58,7 +62,7 @@ pnid_rect = pnid.get_rect(center=pnid_center)
 valve_names = ["NSV1", "NSV2", "NSV3", "NSV4", "NSV5", "OSV1", "OSV2", "OSV3", "OSV4", "OSV5", "OSV6", "ISV1", "ISV2"]
 # valve_index = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] # These get updated according to what's input on the Setup Tab
 
-valve_locations = [(-135, -280, 1), (-30, -310, 0), (-30, -270, 0), (-30, -230, 0), (-30, -190, 0), (-30, -150, 0), (-30, -110, 0), (-30, -70, 0), (-30, -30, 0), (-30, 10, 0), (-30, 50, 0), (-30, 90, 0), (-30, 130, 0)]
+valve_locations = [(-135, -280, 1), (-30, -310, 0), (-120, 200, 0), (-70, 370, 0), (70, -50, 0), (-90, -260, 0), (-50, 60, 0), (150, 50, 0), (170, 75, 0), (-160, 10, 0), (-210, -40, 0), (40, 280, 0), (175, 240, 0)]
 valve_buttons = []
 valve_override_locations = [(-155, -280, 1), (-30, -290, 0)]
 valve_override_buttons = []
@@ -142,6 +146,95 @@ for valve_location in valve_locations:
 #                                 15 if valve_override_location[2] == 1 else 30, 30 if valve_override_location[2] == 1 else 15, False,
 #                                 PINK, GRAY))
 
+def open_serial():
+    while True:
+        try:
+            # if ser_obj is None or not ser_obj.is_open:
+              ser = serial.Serial(radio_port, radio_baud, timeout=1)
+              print("[LoRa] Serial port connected.")
+              return ser
+            # else:
+            #   return ser_obj
+        except serial.SerialException as e:
+            print(e)
+            print(f"[LoRa] Waiting for {radio_port} to be available...")
+            time.sleep(2)
+            try:
+                ser.close()
+            except:
+                pass
+
+def radio_send(ser, cmd):
+    print("SEND:", cmd)
+    ser.write((cmd + '\r\n').encode())
+    time.sleep(0.1)
+
+def radio_read_response(ser, timeout=2):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            if ser.in_waiting:
+                line = ser.readline().decode().strip()
+                print(line)
+                if line:
+                    return line
+        except serial.SerialException:
+            return None
+        except Exception:
+            pass
+    return None
+
+def lora_thread():
+    #ser = None
+    #try:
+        try:
+            ser = open_serial()  # Waits and retries until COM port is available
+        except:
+            ser = None
+
+        while True:
+            try:
+                # Check for high-priority injected commands
+                try:
+                    cmd = command_queue.get_nowait()
+                    print(f"[Master] Injected command: {cmd}")
+                    radio_send(ser, cmd)
+                    resp = radio_read_response(ser)
+                    if resp:
+                        response_queue.put(resp)
+                    continue
+                except Empty:
+                    pass  # No command, continue polling
+
+                # Default polling
+                radio_send(ser, "{-5}")
+                resp = radio_read_response(ser)
+                if resp and resp.startswith("DATA:"):
+                    response_queue.put(resp[5:])
+                    # radio_send(ser, "ACK")
+
+                time.sleep(1)
+
+            except serial.SerialException as e:
+                print(f"[Master] Serial read/write error: {e}. Reconnecting...")
+                try:
+                    ser.close()
+                except:
+                    pass
+                time.sleep(1)
+                ser = open_serial()
+
+    #except Exception as e:
+    #    print(f"[Master] Unexpected error: {e}")
+
+    #finally:
+    #    if ser and ser.is_open:
+    #        print("[Master] Closing serial port.")
+    #        ser.close()
+
+
+# threading.Thread(target=lora_thread, daemon=True).start()
+
 # def seconds_since_midnight():
 #     # Get the current time
 #     now = datetime.now()
@@ -151,62 +244,62 @@ for valve_location in valve_locations:
 #     delta = now - midnight
 #     return delta.total_seconds()
 
-# Function to read the command including the {} characters
-def read_command(ser):
-    global last_radio_rx
-    buffer = ""
-    while True:
-      if not radio_connected:
-         break
-      if ser.in_waiting > 0:
-          data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
+# # Function to read the command including the {} characters
+# def read_command(ser):
+#     global last_radio_rx
+#     buffer = ""
+#     while True:
+#       if not radio_connected:
+#          break
+#       if ser.in_waiting > 0:
+#           data = ser.read(ser.in_waiting).decode('utf-8', errors='ignore')
           
-          if data == "{":
-              buffer = ""
+#           if data == "{":
+#               buffer = ""
 
-          buffer += data
-          while '{' in buffer and '}' in buffer:
-              start = buffer.find('{')
-              end = buffer.find('}', start)
-              if end != -1 and end > start:
-                  command = buffer[start:end+1]  # Include the {} in the command
-                  buffer = buffer[end+1:]
-                  command_buffer.append(command)
-                  # last_radio_rx = seconds_since_midnight()
-                  #print(command)
-                  break
+#           buffer += data
+#           while '{' in buffer and '}' in buffer:
+#               start = buffer.find('{')
+#               end = buffer.find('}', start)
+#               if end != -1 and end > start:
+#                   command = buffer[start:end+1]  # Include the {} in the command
+#                   buffer = buffer[end+1:]
+#                   command_buffer.append(command)
+#                   # last_radio_rx = seconds_since_midnight()
+#                   #print(command)
+#                   break
 
-# Function to start the reading process in a background thread
-def start_reading_radio():
-    global radio_connected
-    try:
-        #ser = serial.Serial(port, baudrate, timeout=2)
-        #print(f"Connected to {port}")
-        # Start the reading loop in a separate thread
-        thread = threading.Thread(target=read_command, args=(radio_serial,), daemon=True)
-        thread.start()
-        #radio_connected = True
-    except serial.SerialException as e:
-        #print(f"Failed to connect to {port}: {e}")
-        radio_connected = False    
+# # Function to start the reading process in a background thread
+# def start_reading_radio():
+#     global radio_connected
+#     try:
+#         #ser = serial.Serial(port, baudrate, timeout=2)
+#         #print(f"Connected to {port}")
+#         # Start the reading loop in a separate thread
+#         thread = threading.Thread(target=read_command, args=(radio_serial,), daemon=True)
+#         thread.start()
+#         #radio_connected = True
+#     except serial.SerialException as e:
+#         #print(f"Failed to connect to {port}: {e}")
+#         radio_connected = False    
 
-def radio_send(command):
-    global radio_connected
-    print("SEND", command)
-    if radio_connected:
-      # cur_time = seconds_since_midnight()
-      # start_wait_time = cur_time
-      # last_send_time = last_radio_rx
+# def radio_send(command):
+#     global radio_connected
+#     print("SEND", command)
+#     if radio_connected:
+#       # cur_time = seconds_since_midnight()
+#       # start_wait_time = cur_time
+#       # last_send_time = last_radio_rx
 
-      # while ((cur_time - last_send_time) < 0.2 and (cur_time - start_wait_time) < 2):
-      #    cur_time = seconds_since_midnight()
-      #    time.sleep(0.01)
+#       # while ((cur_time - last_send_time) < 0.2 and (cur_time - start_wait_time) < 2):
+#       #    cur_time = seconds_since_midnight()
+#       #    time.sleep(0.01)
 
-      try:
-        #print(command)
-        radio_serial.write(command.encode())
-      except:
-        radio_connected = False   
+#       try:
+#         #print(command)
+#         radio_serial.write(command.encode())
+#       except:
+#         radio_connected = False   
 
 def send_sensor_config():
   global radio_connected
@@ -219,7 +312,7 @@ def send_sensor_config():
   for text_input in daq_sensor_names:
       names.append(text_input.text)
   command = "{-1," + ",".join(names) + "}"
-  radio_out_buffer.append(command)
+  command_queue.put(command)
 
   #time.sleep(1)
 
@@ -228,7 +321,7 @@ def send_sensor_config():
   for drop in daq_sensor_type:
       types.append(drop.selected)
   command = "{-2," + ",".join(types) + "}"
-  radio_out_buffer.append(command)
+  command_queue.put(command)
 
   #time.sleep(1)
 
@@ -238,7 +331,7 @@ def send_sensor_config():
      pranges.append((0, daq_pt_pmax[i].text))
   formatted_tuples = [f"({','.join(map(str, t))})" for t in pranges]
   command = f"{{-3,{','.join(formatted_tuples)}}}"
-  radio_out_buffer.append(command)
+  command_queue.put(command)
 
   #time.sleep(2)
 
@@ -248,7 +341,7 @@ def send_sensor_config():
      vranges.append((daq_pt_vmin[i].text, daq_pt_vmax[i].text))
   formatted_tuples = [f"({','.join(map(str, t))})" for t in vranges]
   command = f"{{-4,{','.join(formatted_tuples)}}}"
-  radio_out_buffer.append(command)
+  command_queue.put(command)
 
   #time.sleep(1)
 
@@ -308,19 +401,21 @@ def parse_state_string(s):
          pass
     return state_list
 
-radio_out_buffer = []
+# radio_out_buffer = []
+
+threading.Thread(target=lora_thread, daemon=True).start()
 
 # Main GUI loop
 running = True
 while running:
-    # Connecting to the radio
-    if (not radio_connected) or radio_serial == None:
-        try:
-          radio_serial = serial.Serial(radio_port, radio_baud, timeout=2)
-          radio_connected = True
-          start_reading_radio()
-        except:
-          radio_connected = False
+    # # Connecting to the radio
+    # if (not radio_connected) or radio_serial == None:
+    #     try:
+    #       radio_serial = serial.Serial(radio_port, radio_baud, timeout=2)
+    #       radio_connected = True
+    #       start_reading_radio()
+    #     except:
+    #       radio_connected = False
 
 
     screen.fill(BG_COLOR)  # Clear the screen
@@ -372,23 +467,44 @@ while running:
     #command_buffer = ["{-7,187.65491956472397,-204.44412901997566,-387.9949062466621,-605.0885435342788,-829.7873514890671,-1015.101374745369,-1215.3105375766752,-1371.9635581970215,-1532.914491891861,-1588.3246221542358,-1588.3383815288544,-1588.3388571739195,-1588.3324513435364,28.931032069570122,21.80409868538385}"]
 
     # Processing the incoming commands from RPI
-    for command in command_buffer:
+    while not response_queue.empty():
+      command = response_queue.get()
       print(command)
        # -7 => new DAQ data
       if command.startswith("{-7,"):
           try:
-             daq_readings = list(map(float, command.strip("{").strip("}").split(",")[1:]))
+             daq_readings = list(map(float, command.strip("{").strip("\n").strip("}").split(",")[1:]))
              for i_text in range(len(daq_readings_texts)):
-                daq_readings_texts[i_text].text = str(sigfig_round(daq_readings[i_text],4))
+                daq_readings_texts[i_text].text = str(daq_readings[i_text])
           except:
             pass
           
 
       if command.startswith("{1,"):
           states = parse_state_string(command)
+          print("states: ", states, command)
           if len(states) == 14:
-             for i, button in enumerate(valve_buttons):
-                button.is_on = states[i] == 1
+             
+            for i,name in enumerate(valve_names):
+                #valve_name = valve_assign_drops[i].selected
+                for j, state in enumerate(states):
+                    if valve_assign_drops[j].selected == name:
+                      valve_buttons[i].is_on = state == 1
+                      break
+                    if j == 13:
+                        valve_buttons[i].is_on = False
+                #for j, name in enumerate(valve_names):
+                #    if name == valve_name:
+                #        valve_buttons[j].is_on = state == 1
+
+            #     index = find_valve_index(valve_names[i])
+            #     if index > 0 and index < 14:
+            #         button.is_on[index] = states[i] == 1
+
+
+            #  for i, button in enumerate(valve_buttons):
+                
+            #     button.is_on = states[i] == 1
 
     # command_buffer = []
 
@@ -412,9 +528,9 @@ while running:
     #Printing commands I want to send
     
     if(sum(valve_updates) > 0):         
-      SEND#radio_out_buffer.append("{1," + str(valve_updates.index(1)) + "}")
+      command_queue.put("{1," + str(valve_updates.index(1)) + "}")
     if sum(valve_override_updates) > 0:
-      SEND#radio_out_buffer.append("{2," + str(valve_override_updates.index(1)) + "}")
+      command_queue.put("{2," + str(valve_override_updates.index(1)) + "}")
 
     # Draw updates
     pygame.display.flip()  # Update the display

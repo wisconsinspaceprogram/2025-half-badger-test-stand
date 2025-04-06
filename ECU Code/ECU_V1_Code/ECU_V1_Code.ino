@@ -46,10 +46,10 @@ float extraDataValues[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 // Valve info
 uint8_t valvePins[14] = {46, 6, 5, 4, 3, 2, 7, 8, 9, 10, 11, 12, 44, 45};
-uint8_t valveState[14] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-uint8_t valveClosed[14] = {10, 30, 10, 10, 10, 10, 20, 50, 10, 10, 10, 10, 10, 10};
-uint8_t valveOpened[14] = {90, 160, 100, 100, 100, 100, 140, 100, 100, 100, 100, 100, 100, 100};
-uint8_t valveOvershoot[14] = {10, 15, 5, 5, 5, 5, 10, 5, 5, 20, 5, 5, 5};
+uint8_t valveState[14] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+uint8_t valveClosed[14] = {30, 30, 30, 30, 30, 30, 20, 20, 20, 20, 20, 20, 30, 30};
+uint8_t valveOpened[14] = {160, 160, 160, 160, 160, 160, 100, 100, 100, 100, 100, 100, 160, 160};
+uint8_t valveOvershoot[14] = {15, 15, 15, 15, 15, 15, 10, 10, 10, 10, 15, 15, 15};
 uint8_t valveOverride[14] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 Servo valveServos[14] = {};
 
@@ -454,7 +454,7 @@ bool isValveScheduled(int valveID) {
 
 void printValveStates() {
   Serial.print("{1");
-  for (int i = 0; i < (sizeof(valveState) / sizeof(valveState[0])); i++) {
+  for (int i = 0; i < 14; i++) {
     Serial.print(",");
     Serial.print(valveState[i]);
   }

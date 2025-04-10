@@ -6,7 +6,7 @@ import numpy as np
 import traceback
 import serial
 
-s = serial.Serial('/dev/ttyACM0', baudrate=115200, timeout=1)
+#s = u6.U6(firstFound=True, localId=None, serial=None)#serial.Serial('LabJack U6', baudrate=115200, timeout=1)
 
 d = u6.U6()
 
@@ -18,7 +18,7 @@ def getCJ(d):
 
 def getCJMidStream(d):
     d.streamStop()
-    
+    print(d.getAIN(14)* -92.6 + 467.6 - 273.15)
     CJ = d.getAIN(14) * -92.6 + 467.6 - 273.15
 
     d.streamStart()
@@ -27,7 +27,7 @@ def getCJMidStream(d):
 
 print("Configuring U6 stream")
 
-d.streamConfig(NumChannels=3, ChannelNumbers=[0, 1, 2], ChannelOptions=[48,48,48], SettlingFactor=1, ResolutionIndex=1, ScanFrequency=10000)
+d.streamConfig(NumChannels=1, ChannelNumbers=[0], ChannelOptions=[48], SettlingFactor=1, ResolutionIndex=1, ScanFrequency=10000)
 
 
 CJC_Temp = d.getAIN(14) * -92.6 + 467.6 - 273.15
@@ -49,10 +49,11 @@ try:
               CJC_Temp = getCJMidStream(d)
 
 
-            print(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40)#, CJC_Temp + np.mean(r["AIN1"]) * 1e6 / 40, CJC_Temp + np.mean(r["AIN2"]) * 1e6 / 40, CJC_Temp)
+            #print(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40)#, CJC_Temp + np.mean(r["AIN1"]) * 1e6 / 40, CJC_Temp + np.mean(r["AIN2"]) * 1e6 / 40, CJC_Temp)
 
-            out = str(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40) + "\n"
-            s.write(out.encode())
+            #out = str(CJC_Temp + np.mean(r["AIN0"]) * 1e6 / 40) + "\n"
+            #print(r["AIN14"])
+            #s.write(out.encode())
 
         else:
             print("No data ; %s" % datetime.now())

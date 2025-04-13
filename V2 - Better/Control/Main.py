@@ -1,4 +1,6 @@
+import csv
 import math
+import os
 import queue
 import threading
 import pygame
@@ -16,6 +18,8 @@ from labjack import ljm
 from statistics import mean
 import u6
 
+from thermocouples_reference import thermocouples
+tc_t_reference = thermocouples['T']
 
 # Initialize pygame
 pygame.init()
@@ -52,12 +56,19 @@ valve_index = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 valve_locations = [(-135, -280, 1), (-30, -310, 0), (-120, 200, 0), (-70, 370, 0), (70, -50, 0), (-90, -260, 0), (-50, 60, 0), (150, 50, 0), (170, 75, 0), (-160, 10, 0), (-210, -40, 0), (40, 280, 0), (175, 240, 0)]
 valve_buttons = []
-valve_override_locations = [(-155, -280, 1), (-30, -290, 0)]
+valve_override_locations = [(-135, -250, 1), (-30, -280, 0), (-120, 170, 0), (-70, 340, 0), (70, -80, 0), (-90, -290, 0), (-50, 90, 0), (150, 80, 0), (170, 45, 0), (-160, -20, 0), (-210, -70, 0), (40, 250, 0), (175, 200, 0)]
 valve_override_buttons = []
+
+# Making the pyro channel manual override buttons and such
+pyro_center = (1100, 750)
+pyro_labels = [Label("Pyro 1: ", 3, pyro_center[0], pyro_center[1]), Label("Pyro 2: ", 3, pyro_center[0], pyro_center[1]+30)]
+pyro_buttons = [Button(pyro_center[0] + 65, pyro_center[1], 30, 15, False), Button(pyro_center[0]+ 65, pyro_center[1]+30, 30, 15, False)]
+pyro_override_buttons = [Button(pyro_center[0]+100, pyro_center[1], 30, 15, False, PINK, GRAY), Button(pyro_center[0]+100, pyro_center[1]+30, 30, 15, False, PINK, GRAY)]
+                                
 
 # Sensor Update Shit
 T7_channel_ids = ["AIN0", "AIN1", "AIN2", "AIN3", "AIN4", "AIN5", "AIN6", "AIN7", "AIN8", "AIN9", "AIN10", "AIN11", "AIN12", "AIN13"]
-T7_sensor_types = ["PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "PT", "TC_T"]
+T7_sensor_types = ["PT", "PT", "PT", "PT", "PT", "PT", "PT", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "LOAD"]
 T7_pt_pressure_ranges = [(0, 1500)] * 14
 T7_pt_voltage_ranges = [(0, 10)] * 14
 
@@ -83,7 +94,7 @@ T7_sensor_labels.append(Label("Value", 2, 250, 50))
 T7_sensor_labels.append(Label("T7 DAQ", 3, 50, 25))
 
 U6_channel_ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-U6_sensor_types = ["TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_K", "TC_T"]
+U6_sensor_types = ["TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T", "TC_T"]
 U6_pt_pressure_ranges = [(0, 1500)] * 14
 U6_pt_voltage_ranges = [(0, 10)] * 14
 
@@ -105,6 +116,15 @@ U6_sensor_labels.append(Label("Name", 2, 525, 50))
 U6_sensor_labels.append(Label("Value", 2, 650, 50))
 U6_sensor_labels.append(Label("U6 DAQ", 3, 450, 25))
 
+# Other useful info
+stateText = Label("State: ", 3, 50, 700)
+batteryText = Label("Battery: ??.??V", 3, 50, 740)
+lastCommandRecieved = Label("Last Command: ??s", 3, 50, 780)
+lastStateChange = Label("Last State: ??s", 3, 50, 820)
+loadSequenceLabel = Label("Load Sequence From File: ", 3, 50, 860)
+loadSequenceButton = Button(270, 860, 30, 15, False, BLUE, BLUE)
+startSequenceButon = Button(800, 860, 30, 15, False, BLUE, BLUE)
+
 #Actaul DAQ reading info
 T7_Read_Buffer = queue.Queue()
 T7_processed_buffer = queue.Queue()
@@ -118,6 +138,13 @@ U6 = None
 U6_CJC = 0
 U6_CJC_Updated = False
 
+# ECU Info
+ecu_command_buffer = queue.Queue()
+ecu_serial = None
+ecu_port = "COM15"
+ecu_baud = 115200
+ecu_connected = False
+
 # Command interface
 #
 # 1: Manually toggle valves, value is held until the valve control is returned to the ECU 
@@ -130,6 +157,8 @@ U6_CJC_Updated = False
 # Send valve index to flip
 # {2,VALVE_INDEX}
  
+# 3, 4, same as 1, 2 but for pyro channels 1 and 2, index 0 and 1
+
 # x: standalone command, ECU will process this, no other parameters used
 # {x}
 # Fire sequence => {20}
@@ -139,40 +168,42 @@ for valve_location in valve_locations:
     valve_buttons.append(Button(pnid_center[0] + valve_location[0], pnid_center[1] + valve_location[1],
                                 15 if valve_location[2] == 1 else 30, 30 if valve_location[2] == 1 else 15, False,))
     
-# for valve_override_location in valve_override_locations:
-#     valve_override_buttons.append(Button(pnid_center[0] + valve_override_location[0], pnid_center[1] + valve_override_location[1],
-#                                 15 if valve_override_location[2] == 1 else 30, 30 if valve_override_location[2] == 1 else 15, False,
-#                                 PINK, GRAY))
+for valve_override_location in valve_override_locations:
+    valve_override_buttons.append(Button(pnid_center[0] + valve_override_location[0], pnid_center[1] + valve_override_location[1],
+                                15 if valve_override_location[2] == 1 else 30, 30 if valve_override_location[2] == 1 else 15, False,
+                                PINK, GRAY))
 
 def poly_eval(coeffs, x):
     return sum(c * x**i for i, c in enumerate(coeffs))
 
 def type_k_temp_from_voltage(mv):
     """Type K: voltage (mV) → temperature (°C)"""
-    if -5.891 <= mv < 0:
+    #if -5.891 <= mv < 0:
+    if mv < 0:
         coeffs = [
             0.0000000E+00,
             2.5173462E+01,
-            -1.1662878E+00,
-            -1.0833638E+00,
-            -8.9773540E-01,
-            -3.7342377E-01,
-            -8.6632643E-02,
-            -1.0450598E-02,
-            -5.1920577E-04,
+            -1.1662878E-03,
+            -1.0833638E-6,
+            -8.9773540E-10,
+            -3.7342377E-13,
+            -8.6632643E-17,
+            -1.0450598E-20,
+            -5.1920577E-25,
         ]
-    elif 0 <= mv <= 54.886:
+    #elif 0 <= mv <= 54.886:
+    elif mv >= mv:
         coeffs = [
             0.000000E+00,
             2.508355E+01,
-            7.860106E-02,
-            -2.503131E-01,
-            8.315270E-02,
-            -1.228034E-02,
-            9.804036E-04,
-            -4.413030E-05,
-            1.057734E-06,
-            -1.052755E-08,
+            7.860106E-05,
+            -2.503131E-7,
+            8.315270E-11,
+            -1.228034E-14,
+            9.804036E-19,
+            -4.413030E-23,
+            1.057734E-27,
+            -1.052755E-32,
         ]
     else:
         return -9998
@@ -180,26 +211,28 @@ def type_k_temp_from_voltage(mv):
 
 def type_t_temp_from_voltage(mv):
     """Type T: voltage (mV) → temperature (°C)"""
-    if -5.603 <= mv <= 0:
+    #if -5.603 <= mv <= 0:
+    if mv <= 0:
         coeffs = [
             0.0000000E+00,
             2.5949192E+01,
-            -2.1316967E-01,
-            7.9018692E-01,
-            4.2527777E-01,
-            1.3304473E-01,
-            2.0241446E-02,
-            1.2668171E-03,
+            -2.1316967E-04,
+            7.9018692E-07,
+            4.2527777E-10,
+            1.3304473E-13,
+            2.0241446E-17,
+            1.2668171E-21,
         ]
-    elif 0 < mv <= 20.872:
+    #elif 0 < mv <= 20.872:
+    elif 0 < mv:
         coeffs = [
             0.000000E+00,
             2.592800E+01,
-            -7.602961E-01,
-            4.637791E-02,
-            -2.165394E-03,
-            6.048144E-05,
-            -7.293422E-07,
+            -7.602961E-04,
+            4.637791E-8,
+            -2.165394E-12,
+            6.048144E-17,
+            -7.293422E-22,
         ]
     else:
         return -9998
@@ -426,6 +459,22 @@ def drawScreen(screen):
     for text in U6_readings_texts:
         text.draw(screen, fonts)
 
+    #Extra info
+    stateText.draw(screen, fonts)
+    batteryText.draw(screen, fonts)
+    lastCommandRecieved.draw(screen, fonts)
+    lastStateChange.draw(screen, fonts)
+    loadSequenceLabel.draw(screen, fonts)
+    loadSequenceButton.draw(screen)
+    startSequenceButon.draw(screen)
+
+    for item in pyro_labels:
+       item.draw(screen, fonts)
+    for item in pyro_buttons:
+       item.draw(screen)
+    for item in pyro_override_buttons:
+       item.draw(screen)
+
 
 def sigfig_round(x, sig):
     if not x == 0:
@@ -483,9 +532,10 @@ def proccess_daq(daq="T7"):
           try:
             if sesnor_types[i_sensor] == "TC_K":
               #print((sample[i_sensor]))
-              processed_sample[i_sensor] = type_t_temp_from_voltage(sample[i_sensor])*1000 + processed_sample[14]#tc_k_reference.inverse_CmV((sample[i_sensor][-1])*1000, Tref=processed_sample[14])
+              processed_sample[i_sensor] = type_k_temp_from_voltage(sample[i_sensor]*1000) + processed_sample[14]#tc_k_reference.inverse_CmV((sample[i_sensor][-1])*1000, Tref=processed_sample[14])
             elif sesnor_types[i_sensor] == "TC_T":
-              processed_sample[i_sensor] = type_t_temp_from_voltage(sample[i_sensor])*1000 + processed_sample[14]#0#tc_t_reference.inverse_CmV((sample[i_sensor][-1])*1000, Tref=processed_sample[14])
+              processed_sample[i_sensor] = type_t_temp_from_voltage(sample[i_sensor]*1000) + processed_sample[14] #tc_t_reference.inverse_CmV((sample[i_sensor])*1000, Tref=processed_sample[14])# sample[i_sensor]*1000#type_t_temp_from_voltage(sample[i_sensor])*1000 + processed_sample[14]#0#tc_t_reference.inverse_CmV((sample[i_sensor][-1])*1000, Tref=processed_sample[14])
+              #print("t")
             elif sesnor_types[i_sensor] == "PT":
               pmin = pt_pres_range[i_sensor][0]
               pmax = pt_pres_range[i_sensor][1]
@@ -493,6 +543,8 @@ def proccess_daq(daq="T7"):
               vmax = pt_volt_range[i_sensor][1]
 
               processed_sample[i_sensor] = pmin + (sample[i_sensor] - vmin) * (pmax - pmin) / (vmax - vmin)
+            elif sesnor_types[i_sensor] == "LOAD":
+               processed_sample[i_sensor] = sample[i_sensor]
           except Exception as e:
               print(daq, e)
               processed_sample[i_sensor] = -9999
@@ -518,6 +570,40 @@ def proccess_daq(daq="T7"):
   # elif daq == "U6":
   #    U6_Read_Buffer = []
 
+def read_command_ecu():
+    global ecu_connected
+    try:
+      buffer = ""
+      while True:
+        if ecu_serial.in_waiting > 0:
+            data = ecu_serial.readline(ecu_serial.in_waiting).decode('utf-8', errors='ignore')
+            
+            if data == "{":
+                buffer = ""
+
+            buffer += data
+            while '{' in buffer and '}' in buffer:
+                start = buffer.find('{')
+                end = buffer.find('}', start)
+                if end != -1 and end > start:
+                    command = buffer[start:end+1]  # Include the {} in the command
+                    buffer = buffer[end+1:]
+                    ecu_command_buffer.put(command)
+                    print(command)
+                else:
+                   break
+        else:
+           time.sleep(0.01)
+    except:
+       ecu_connected = False
+
+def start_reading_ecu():
+    global ecu_connected
+    try:
+        thread = threading.Thread(target=read_command_ecu, args=(), daemon=True)
+        thread.start()
+    except serial.SerialException as e:
+        ecu_connected = False
 
 #Starting daq reads
 thread_t7 = threading.Thread(target=read_T7)
@@ -526,10 +612,22 @@ thread_t7.start()
 thread_u6 = threading.Thread(target=read_U6)
 thread_u6.start()
 
+filename_t7 = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_t7.csv'
+filename_u6 = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_u6.csv'
+
 # Main GUI loop
 running = True
 while running:
     
+    if not ecu_connected or ecu_serial == None:
+      try:
+          ecu_serial = serial.Serial(ecu_port, ecu_baud, timeout=2)
+          #ecu_serial.setDTR(False)
+          ecu_connected = True
+          start_reading_ecu()
+      except:
+          ecu_connected = False
+
     #update_daq_readings(T7_readings_texts, [0.0001,1.2154668,2,3,4,5,6,7,8,9,10,11,12,13,14])
     #read_T7()
     # Event handling
@@ -540,12 +638,124 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
+        # Valve updates
         for i_button in range(len(valve_buttons)):
-            valve_updates[valve_index[i_button]] = valve_buttons[valve_index[i_button]].handle_event(event)
-            
-
+            #valve_updates[valve_index[i_button]] = valve_buttons[valve_index[i_button]].handle_event(event)
+            if valve_buttons[valve_index[i_button]].handle_event(event) == 1:
+              try:
+                 ecu_serial.write(("{1," + str(valve_index[i_button]) + "}").encode())
+              except Exception as e:
+                 print(e)
+              #print(("{1," + str(valve_index[i_button]) + "}").encode())
         for i_button in range(len(valve_override_buttons)):
-            valve_override_updates[valve_index[i_button]] += valve_override_buttons[valve_index[i_button]].handle_event(event)
+            if valve_override_buttons[valve_index[i_button]].handle_event(event) == 1:
+              try:
+                  ecu_serial.write(("{2," + str(valve_index[i_button]) + "}").encode())
+              except Exception as e:
+                 print(e)
+            #valve_override_updates[valve_index[i_button]] += valve_override_buttons[valve_index[i_button]].handle_event(event)
+
+        #Pyro Updates
+        for i_button in range(len(pyro_buttons)):
+            if pyro_buttons[i_button].handle_event(event) == 1:
+              ecu_serial.write(("{3," + str(i_button) + "}").encode())
+        for i_button in range(len(pyro_override_buttons)):
+            if pyro_override_buttons[i_button].handle_event(event) == 1:
+              ecu_serial.write(("{4," + str(i_button) + "}").encode())
+
+        if loadSequenceButton.handle_event(event) == 1:
+           open_path = easygui.fileopenbox("State Data to open")
+           
+           if open_path != None:
+              with open(open_path, "rb") as file:
+                loaded_data = dill.load(file)
+
+                state_numbers = loaded_data["numbers"]
+                state_operations = loaded_data["operations"]
+                state_ids = loaded_data['ids']
+                state_thresholds = loaded_data['thresholds']
+                state_num_sensors = loaded_data['num_sensors']
+                state_physical_state = loaded_data['physical']
+                state_to_states = loaded_data['toNumbers']
+
+                # Bro fuck this function
+                for i in range(len(state_numbers)):
+                   print(state_to_states[i])
+                   #print(state_numbers[i], state_operations[i][0], state_ids[i][0], state_thresholds[i][0], state_num_sensors[i][0], state_physical_state[i])
+
+                   outString = "{9,"
+
+                   outString += str(int(state_numbers[i]))
+                   outString += ","
+
+                   opString = ""
+                   for op in range(3):
+                      opString += "0" if state_operations[i][0][op] == '<' else ("1" if state_operations[i][0][op] == '=' else "2")
+                      opString += ","
+
+                   outString += opString
+
+                   state_id_string = ""
+                   for id in range(3):
+                      state_id_string += "101" if state_ids[i][0][id] == 'T_STATE' else ("103" if state_ids[i][0][id] == "COMMAND" else "0")
+                      state_id_string += ","
+
+                   outString += state_id_string
+
+                   thresh_string = ""
+                   for thresh in range(3):
+                      thresh_string += state_thresholds[i][0][thresh]
+                      if len(state_thresholds[i][0][thresh]) == 0:
+                         thresh_string += "0"
+                      thresh_string += ","
+                    
+                   outString += thresh_string
+
+                   physical_state_string = ""
+                   for j in range(14):
+                      index = -1
+                      try:
+                         index = valve_index.index(j)
+                      except:
+                        pass
+                      
+                      if index == -1:
+                         physical_state_string += "0,"
+                      else:
+                         #print(valve_names[index])
+                         #print(state_physical_state[i])
+                         physical_state_string += str(state_physical_state[i][valve_names[index]])
+                         physical_state_string += ","
+                 
+                   physical_state_string += str(state_physical_state[i]['PYRO1'])
+                   physical_state_string += ","
+                   physical_state_string += str(state_physical_state[i]['PYRO2'])
+                   physical_state_string += ","
+
+
+                   toStateString = ""
+                   for j in range(3):
+                      toStateString += state_to_states[i][0][j]
+                      if len(state_to_states[i][0][j]) == 0:
+                         toStateString += '0'
+                      toStateString += ','
+                  
+                   outString += toStateString
+
+                   outString += physical_state_string
+                   outString = outString[:-1] + '}' 
+
+                   try:
+                      ecu_serial.write(outString.encode())
+                   except Exception as e:
+                      print(e)
+                    
+                   time.sleep(0.1)
+                   #print(outString)
+
+        if startSequenceButon.handle_event(event) == 1:
+           if ecu_connected:
+              ecu_serial.write(("{15}").encode())
 
         for sensor in T7_sensor_names:
             sensor.handle_event(event)
@@ -557,7 +767,7 @@ while running:
 
     T7_processed_list = []
     U6_processed_list = []
-
+    #print(ecu_command_buffer.qsize())
     while True:
       try:
          #update_daq_readings(T7_readings_texts, )
@@ -573,83 +783,68 @@ while running:
          break
       
     if len(T7_processed_list) > 0:
+       with open(filename_t7, 'a', newline='', errors='ignore') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            #for sample in T7_processed_list:
+            csv_writer.writerow([datetime.now()] + T7_processed_list[-1], )
+    
+    if len(U6_processed_list) > 0:
+       with open(filename_u6, 'a', newline='', errors='ignore') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            #for sample in U6_processed_list:
+            csv_writer.writerow([datetime.now()] + U6_processed_list[-1], )
+      
+    if len(T7_processed_list) > 0:
        update_daq_readings(T7_readings_texts, T7_processed_list[-1])
     if len(U6_processed_list) > 0:
        update_daq_readings(U6_readings_texts, U6_processed_list[-1])
        #print(U6_CJC)
 
-    # # Processing the incoming commands from RPI
-    # while not response_queue.empty():
-    #   command = response_queue.get()
-    #   print(command)
-    #    # -7 => new DAQ data
-    #   if command.startswith("{-7,"):
-    #       try:
-    #          daq_readings = list(map(float, command.strip("{").strip("\n").strip("}").split(",")[1:]))
-    #          for i_text in range(len(daq_readings_texts)):
-    #             daq_readings_texts[i_text].text = str(daq_readings[i_text])
-    #       except:
-    #         pass
+    while True:
+      try:
+        ecu_command = ecu_command_buffer.get(timeout=0.01)
           
+        if ecu_command.startswith("{1,"):
+            states = parse_state_string(ecu_command)
+            
+            if len(states) == 14:
+              #print("states: ", states, ecu_command)
 
-    #   if command.startswith("{1,"):
-    #       states = parse_state_string(command)
-    #       print("states: ", states, command)
-    #       if len(states) == 14:
-             
-    #         for i,name in enumerate(valve_names):
-    #             #valve_name = valve_assign_drops[i].selected
-    #             for j, state in enumerate(states):
-    #                 if valve_assign_drops[j].selected == name:
-    #                   valve_buttons[i].is_on = state == 1
-    #                   break
-    #                 if j == 13:
-    #                     valve_buttons[i].is_on = False
-    #             #for j, name in enumerate(valve_names):
-    #             #    if name == valve_name:
-    #             #        valve_buttons[j].is_on = state == 1
+              for i, state in enumerate(states):
+                if i in valve_index:
+                   valve_buttons[valve_index.index(i)].is_on = state == 1
 
-    #         #     index = find_valve_index(valve_names[i])
-    #         #     if index > 0 and index < 14:
-    #         #         button.is_on[index] = states[i] == 1
+        if ecu_command.startswith("{2,"):
+            states = parse_state_string(ecu_command)
+            
+            if len(states) == 14:
+              #print("states: ", states, ecu_command)
 
+              for i, state in enumerate(states):
+                if i in valve_index:
+                   valve_override_buttons[valve_index.index(i)].is_on = state == 1
 
-    #         #  for i, button in enumerate(valve_buttons):
-                
-    #         #     button.is_on = states[i] == 1
+        if ecu_command.startswith("{3,"):
+            states = parse_state_string(ecu_command)
+            if len(states) == 4:
+               pyro_buttons[0].is_on = states[0]
+               pyro_buttons[1].is_on = states[1]
+               pyro_override_buttons[0].is_on = states[2]
+               pyro_override_buttons[1].is_on = states[3]
 
-    # command_buffer = []
+        if ecu_command.startswith("{9,"):
+           batteryText.text = "Battery: " + ecu_command[3:-1] + "V"
+        if ecu_command.startswith("{8,"):
+           stateText.text = "State: " + ecu_command[3:-1]
+        if ecu_command.startswith("{7,"):
+           lastCommandRecieved.text = "Last Command: " + ecu_command[3:-1] + "s"
+        if ecu_command.startswith("{6,"):
+           lastStateChange.text = "Last State: " + ecu_command[3:-1] + "s"
+      except queue.Empty:
+         break
 
     #Drawing screen
     drawScreen(screen)
-    # while True:
-    #    print(T7_Read_Buffer.get())
-    # if len(T7_Read_Buffer) > 0: 
-    #   print(T7_Read_Buffer[-1])
-    #   T7_Read_Buffer = []
-      #time.sleep(1)
-
-    # frameTime = seconds_since_midnight()
-    # if (math.floor(frameTime) - math.floor(lastFrameTime)) > 2.5:
-          #radio_send("{0," + str(1 + len(radio_out_buffer)) + "}")
-
-          # for com in radio_out_buffer:
-          #    radio_send(com)
-
-          # radio_send("{-5}")
-
-          # lastFrameTime = frameTime
-          # time.sleep(0.5)
-
-          # radio_out_buffer = []
-
-    #Printing commands I want to send
-    
-    if(sum(valve_updates) > 0):   
-      pass      
-      #command_queue.put("{1," + str(valve_updates.index(1)) + "}")
-    if sum(valve_override_updates) > 0:
-      pass#command_queue.put("{2," + str(valve_override_updates.index(1)) + "}")
 
     # Draw updates
     pygame.display.flip()  # Update the display

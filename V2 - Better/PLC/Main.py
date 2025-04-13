@@ -126,6 +126,8 @@ while running:
               state_change_sensor_id = []
               state_change_threshold_values = []
               state_change_num_sensors = []
+              state_change_physical_state = []
+              to_state_numbers = []
 
               if save_path != None:
                 for node in nodes:
@@ -134,13 +136,15 @@ while running:
                     state_change_sensor_id.append(node.get_sensor_ids())
                     state_change_threshold_values.append(node.get_thresholds())
                     state_change_num_sensors.append(node.get_num_sensors())
+                    state_change_physical_state.append(node.get_physical_state_dict())
+                    to_state_numbers.append(node.get_to_states())
 
 
                     #process out invalid stuff and get mad if there are any issues!!!
 
 
-                out_dict = {'numbers': state_numbers, 'operations':state_change_operations, 'ids':state_change_sensor_id, 
-                                'thresholds':state_change_threshold_values, 'num_sensors':state_change_num_sensors, 'nodes':nodes}
+                out_dict = {'numbers': state_numbers, 'toNumbers': to_state_numbers, 'operations':state_change_operations, 'ids':state_change_sensor_id, 
+                                'thresholds':state_change_threshold_values, 'num_sensors':state_change_num_sensors, 'nodes':nodes, 'physical':state_change_physical_state}
                     
                 if not save_path.endswith(".pkl"):
                    save_path += '.pkl'

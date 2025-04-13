@@ -10,6 +10,9 @@ GRAY = (200, 200, 200)
 BLACK = (0, 0, 0)
 BLUE = (200, 200, 255)
 
+# Valve names
+valve_names = ["NSV1", "NSV2", "NSV3", "NSV4", "NSV5", "OSV1", "OSV2", "OSV3", "OSV4", "OSV5", "OSV6", "ISV1", "ISV2"]
+
 class Node:
     """ A draggable rectangle with a label and dropdowns """
     
@@ -42,11 +45,11 @@ class Node:
 
         # Valve buttons
         # Column 1
-        self.labels.append(Label("NSV1:", fonts, 0, 0, 0))
-        self.labels.append(Label("NSV2:", fonts, 0, 0, 0))
-        self.labels.append(Label("NSV3:", fonts, 0, 0, 0))
-        self.labels.append(Label("NSV4:", fonts, 0, 0, 0))
-        self.labels.append(Label("NSV5:", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[0]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[1]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[2]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[3]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[4]+":", fonts, 0, 0, 0))
         self.label_loc.append((10,30))
         self.label_loc.append((10,45))
         self.label_loc.append((10,60))
@@ -65,11 +68,11 @@ class Node:
         self.button_loc.append((45,90))
 
         # Column 2
-        self.labels.append(Label("ISV1:", fonts, 0, 0, 0))
-        self.labels.append(Label("ISV2:", fonts, 0, 0, 0))
-        self.labels.append(Label("OSV1:", fonts, 0, 0, 0))
-        self.labels.append(Label("OSV2:", fonts, 0, 0, 0))
-        self.labels.append(Label("OSV3:", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[5]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[6]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[7]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[8]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[9]+":", fonts, 0, 0, 0))
         self.label_loc.append((75,30))
         self.label_loc.append((75,45))
         self.label_loc.append((75,60))
@@ -88,9 +91,9 @@ class Node:
         self.button_loc.append((110,90))
 
         # Column 3
-        self.labels.append(Label("OSV4:", fonts, 0, 0, 0))
-        self.labels.append(Label("OSV5:", fonts, 0, 0, 0))
-        self.labels.append(Label("OSV6:", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[10]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[11]+":", fonts, 0, 0, 0))
+        self.labels.append(Label(valve_names[12]+":", fonts, 0, 0, 0))
         self.labels.append(Label("PYRO1:", fonts, 0, 0, 0))
         self.labels.append(Label("PYRO2:", fonts, 0, 0, 0))
         self.label_loc.append((140,30))
@@ -336,3 +339,26 @@ class Node:
         for index in indexes:
             trigger_cnt.append(self.texts[index].text)
         return trigger_cnt
+    
+    def get_physical_state_dict(self):
+        physical_state = {}
+        
+        for i in range(13):
+          physical_state[valve_names[i]] = 1 if self.buttons[i].is_on else 0
+
+        physical_state["PYRO1"] =  1 if self.buttons[13].is_on else 0
+        physical_state["PYRO2"] =  1 if self.buttons[13].is_on else 0
+
+        return physical_state
+    
+    def get_to_states(self):
+        toStates = []
+        indexes = [[3, 5, 7, 9, 11, 13], [16, 18, 20, 22, 24, 26], [29, 31, 33, 35, 37, 39]]
+
+        for set in indexes:
+            set_thresholds = []
+            for index in set:
+                set_thresholds.append(self.texts[index].text)
+            toStates.append(set_thresholds)
+
+        return toStates

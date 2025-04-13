@@ -1,0 +1,57 @@
+// ===============================================================================================
+//									Fuel
+// only fire
+// ===============================================================================================
+
+// State numbers
+uint8_t stateNumber[NUM_STATES] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8,
+};  // Just numbering the states here for consistency and not having to
+    // deal with index values
+
+// STate numbers to move to
+uint8_t stateToNumber[NUM_STATES][STATE_CHANGES_PER_STATE]
+                     [SENSORS_PER_STATE_CHANGE] = {{{0}}, {{2}}, {{3}},
+                                                   {{4}}, {{5}}, {{6}},
+                                                   {{7}}, {{8}}, {{0}}};
+
+// Defines each condition as either using > or < for the sensor threshold
+// comparison
+uint8_t stateChangeOperation
+    [NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {
+        {{2}}, {{2}}, {{2}}, {{2}}, {{2}},
+        {{2}}, {{2}}, {{2}}, {{2}}};  //[[0, 1, 2, 1]..] 0=sensor is < value, 1
+                                      //=
+                                      // sensor is = value, 2 = sensor is >
+                                      // value
+
+// Defines the sensor ID value to be used in the comparision
+uint8_t stateChangeSensorId
+    [NUM_STATES][STATE_CHANGES_PER_STATE][SENSORS_PER_STATE_CHANGE] = {
+        {{101}}, {{101}}, {{101}}, {{101}}, {{101}},
+        {{101}}, {{101}}, {{101}}, {{101}}};  // Sensor ID to be used
+
+// Defines the sensor threshold value to be considered
+float stateChangeValue[NUM_STATES][STATE_CHANGES_PER_STATE]
+                      [SENSORS_PER_STATE_CHANGE] = {
+                          {{10}}, {{11}}, {{1}},  {{1}}, {{2}},
+                          {{10}}, {{1}},  {{24}}, {{1}}};  // Threshold value
+
+// Defines how many sensors in each state change option need to be active to
+// move. Can effectively be used to say all/or for conditions
+uint8_t stateChangeNumSensors[NUM_STATES][STATE_CHANGES_PER_STATE] = {
+    {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}};
+
+// Defines what valves / pyro channels need to be open, 0 = closed / not firing,
+// 1 = open / firing first 14 sets are the 14 valve indexes, last two are the
+// 1st and 2nd pyro channels
+uint8_t statePhysicalState[NUM_STATES][16] = {
+    {0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0},
+    {0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0},
+    {0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0}};

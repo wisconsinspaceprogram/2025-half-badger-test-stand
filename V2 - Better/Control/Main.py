@@ -123,7 +123,12 @@ lastCommandRecieved = Label("Last Command: ??s", 3, 50, 780)
 lastStateChange = Label("Last State: ??s", 3, 50, 820)
 loadSequenceLabel = Label("Load Sequence From File: ", 3, 50, 860)
 loadSequenceButton = Button(270, 860, 30, 15, False, BLUE, BLUE)
+
+startSequenceLabel = Label("Start Sequence: ", 3, 850, 860)
 startSequenceButon = Button(800, 860, 30, 15, False, BLUE, BLUE)
+
+highResDataButton = Button(800, 830, 30, 15, True, GREEN, GRAY)
+highResDataLabel = Label("Log Full Res T7: ", 3, 850, 830)
 
 #Actaul DAQ reading info
 T7_Read_Buffer = queue.Queue()
@@ -357,7 +362,7 @@ def configure_T7():
       info = ljm.getHandleInfo(T7)
       numAddresses = len(T7_channel_ids) + 1
       aScanList = ljm.namesToAddresses(numAddresses, T7_channel_ids + ["AIN14"])[0]
-      scanRate = 2000
+      scanRate = 500
       scansPerRead = scanRate / 2
       # Ensure triggered stream is disabled.
       ljm.eWriteName(T7, "STREAM_TRIGGER_INDEX", 0)
@@ -467,6 +472,9 @@ def drawScreen(screen):
     loadSequenceLabel.draw(screen, fonts)
     loadSequenceButton.draw(screen)
     startSequenceButon.draw(screen)
+    startSequenceLabel.draw(screen, fonts)
+    highResDataButton.draw(screen)
+    highResDataLabel.draw(screen, fonts)
 
     for item in pyro_labels:
        item.draw(screen, fonts)
@@ -613,7 +621,19 @@ thread_u6 = threading.Thread(target=read_U6)
 thread_u6.start()
 
 filename_t7 = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_t7.csv'
+filename_t7_high_res = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_t7_detailed.csv'
 filename_u6 = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_u6.csv'
+filename_ecu_tx = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_ecu_tx.csv'
+filename_ecu_rx = os.path.dirname(__file__)+'/Logs/' + str(datetime.now()).replace(" ", "_").replace(".", "_").replace(":", "_") + '_ecu_rx.csv'
+
+def log_ecu_tx(command):
+   try:
+    with open(filename_ecu_tx, 'a', newline='', errors='ignore') as csvfile:
+              csv_writer = csv.writer(csvfile)
+              #for sample in T7_processed_list:
+              csv_writer.writerow([datetime.now(), command], )
+   except Exception as e:
+      print(e)
 
 # Main GUI loop
 running = True
@@ -644,6 +664,7 @@ while running:
             if valve_buttons[valve_index[i_button]].handle_event(event) == 1:
               try:
                  ecu_serial.write(("{1," + str(valve_index[i_button]) + "}").encode())
+                 log_ecu_tx("{1," + str(valve_index[i_button]) + "}")
               except Exception as e:
                  print(e)
               #print(("{1," + str(valve_index[i_button]) + "}").encode())
@@ -651,6 +672,7 @@ while running:
             if valve_override_buttons[valve_index[i_button]].handle_event(event) == 1:
               try:
                   ecu_serial.write(("{2," + str(valve_index[i_button]) + "}").encode())
+                  log_ecu_tx("{2," + str(valve_index[i_button]) + "}")
               except Exception as e:
                  print(e)
             #valve_override_updates[valve_index[i_button]] += valve_override_buttons[valve_index[i_button]].handle_event(event)
@@ -659,9 +681,11 @@ while running:
         for i_button in range(len(pyro_buttons)):
             if pyro_buttons[i_button].handle_event(event) == 1:
               ecu_serial.write(("{3," + str(i_button) + "}").encode())
+              log_ecu_tx("{3," + str(i_button) + "}")
         for i_button in range(len(pyro_override_buttons)):
             if pyro_override_buttons[i_button].handle_event(event) == 1:
               ecu_serial.write(("{4," + str(i_button) + "}").encode())
+              log_ecu_tx("{4," + str(i_button) + "}")
 
         if loadSequenceButton.handle_event(event) == 1:
            open_path = easygui.fileopenbox("State Data to open")
@@ -756,6 +780,9 @@ while running:
         if startSequenceButon.handle_event(event) == 1:
            if ecu_connected:
               ecu_serial.write(("{15}").encode())
+              log_ecu_tx("{15}")
+
+        highResDataButton.handle_event(event)
 
         for sensor in T7_sensor_names:
             sensor.handle_event(event)
@@ -787,6 +814,21 @@ while running:
             csv_writer = csv.writer(csvfile)
             #for sample in T7_processed_list:
             csv_writer.writerow([datetime.now()] + T7_processed_list[-1], )
+
+    if len(T7_processed_list) > 0 and highResDataButton.is_on:
+       t = datetime.now().strftime("%H:%M:%S")
+       processed_rows = []
+
+       for row in T7_processed_list:
+          processed = [sigfig_round(val, 4) for val in row]
+          processed_rows.append([t, processed[0], processed[1], processed[2], processed[3], processed[4]])
+       
+       with open(filename_t7_high_res, 'a', newline='', errors='ignore') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerows(processed_rows)
+            
+            #for sample in T7_processed_list:
+            #  csv_writer.writerow([t] + sample, )
     
     if len(U6_processed_list) > 0:
        with open(filename_u6, 'a', newline='', errors='ignore') as csvfile:
@@ -840,9 +882,14 @@ while running:
            lastCommandRecieved.text = "Last Command: " + ecu_command[3:-1] + "s"
         if ecu_command.startswith("{6,"):
            lastStateChange.text = "Last State: " + ecu_command[3:-1] + "s"
+
+        with open(filename_ecu_rx, 'a', newline='', errors='ignore') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            #for sample in T7_processed_list:
+            csv_writer.writerow([datetime.now(), ecu_command], )
       except queue.Empty:
          break
-
+      
     #Drawing screen
     drawScreen(screen)
 

@@ -1,0 +1,43 @@
+Valve index to physical location docs
+0: GN2 Main
+1: LOX Tank Vent
+2: LOX Purge
+3: LOX Fill Vent
+4: LOX Fill
+5: LOX Venturi ISO
+6: LOX Venturi Vent
+7: LOX Main
+8: IPA Vent
+9: IPA Purge
+10: IPA Fill/Dump
+11: IPA Main
+12:
+13:
+
+Computer to ECU:
+1: Open Valve
+"{1, x}":
+  -Open valve index x, see above for physical meaning. Move until limit switch is hit
+
+2: Close valve
+"{2, x}":
+  -Close valve index x, see above. Move until limit switch is hit
+
+
+
+ECU to Computer:
+0: Heartbeat, still here
+"{0, t}"
+  -t is time since ECU turned on in seconds.
+  
+1: Desired valve states / what the ECU is commanding the valves to be
+"{1, x0, x1, x2, x3, x4, ... x13}"
+  -xN will either be 1 or 0, 1 indicates valve index N is open, 0 indicates valve index N is closed
+
+2: Detected valve states from limit switches
+"{2, x0, x1, x2, x3, x4, ... x13}"
+  -xN will either be 1 or 0, 1 indicates valve index N is open, 0 indicates valve index N is closed
+
+3: Battery Voltage
+"{3, 7.23}"
+  -Single parameter is the read voltage

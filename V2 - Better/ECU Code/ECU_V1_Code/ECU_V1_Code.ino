@@ -466,15 +466,15 @@ void loop() {
 
     // Processing valve
     checkValveAdjustments();
-    for (int i = 0; i < (sizeof(valvePins) / sizeof(valvePins[0])); i++) {
-        if (!isValveScheduled(i)) {
-            if (valveState[i] == 1) {
-                valveServos[i].write(valveOpened[i]);
-            } else {
-                valveServos[i].write(valveClosed[i]);
-            }
-        }
-    }
+    // for (int i = 0; i < (sizeof(valvePins) / sizeof(valvePins[0])); i++) {
+    //     if (!isValveScheduled(i)) {
+    //         if (valveState[i] == 1) {
+    //             valveServos[i].write(valveOpened[i]);
+    //         } else {
+    //             valveServos[i].write(valveClosed[i]);
+    //         }
+    //     }
+    // }
 
     // Processign pyro channels
     // Disabling if they've been on for more than 1s

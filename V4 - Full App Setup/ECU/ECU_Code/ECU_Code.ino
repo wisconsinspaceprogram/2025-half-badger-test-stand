@@ -25,7 +25,7 @@ uint8_t limitSwitchPins[12] = {
   49,
 };
 
-// RS485 valves 
+// RS485 valves  
 uint8_t rs485ValveAddresses[12] = { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
 uint8_t rs485ValveAngles[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 uint8_t rs485ValveDesiredStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };

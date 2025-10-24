@@ -156,7 +156,7 @@ def start_ecu_communication():
                         ecu_char_read_buffer += data
 
                         # if data.startswith("{"):
-                        #    ecu_char_read_buffer = ""
+                        #    ecu_char_read_buffer = ""jksdf;jkdsfljkdsf;j;ldlh;hi
 
                         while "{" in ecu_char_read_buffer and "}" in ecu_char_read_buffer:
                             start = ecu_char_read_buffer.find("{")

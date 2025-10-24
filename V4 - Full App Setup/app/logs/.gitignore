@@ -1,0 +1,6 @@
+# Ignore all CSV files
+*.csv
+
+# Keep these files
+!.gitignore
+!README.md

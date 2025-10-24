@@ -11,8 +11,8 @@ Valve index to physical location docs
 9: IPA Purge
 10: IPA Fill/Dump
 11: IPA Main
-12:
-13:
+
+TC1: IPA CAV TC
 
 Computer to ECU:
 1: Open Valve
@@ -23,6 +23,9 @@ Computer to ECU:
 "{2, x}":
   -Close valve index x, see above. Move until limit switch is hit
 
+3: Fire Pyro
+"{3, x}":
+  -Fire pyro channel for 1 second, x is the index, only pyro 1 and 2 work
 
 
 ECU to Computer:

@@ -1,0 +1,92 @@
+###
+Home All
+Open,GN2 Main,,,0.0
+Open,LOX Purge,,,0.0
+Open,IPA Purge,,,0.0
+Wait,,,,1.5000000000000002
+Close,GN2 Main,,,0.0
+Close,LOX Purge,,,0.0
+Close,IPA Purge,,,0.0
+Wait,,,,1.5000000000000002
+Open,LOX Tank Vent,,,0.0
+Open,LOX Fill,,,0.0
+Open,LOX Fill Vent,,,0.0
+Wait,,,,1.5
+Close,LOX Tank Vent,,,0.0
+Close,LOX Fill,,,0.0
+Close,LOX Fill Vent,,,0.0
+Wait,,,,1.5
+Open,LOX Venturi Iso,,,0.0
+Open,LOX Venturi Vent,,,0.0
+Open,LOX Main,,,0.0
+Wait,,,,1.5
+Close,LOX Venturi Iso,,,0.0
+Close,LOX Venturi Vent,,,0.0
+Close,LOX Main,,,0.0
+Wait,,,,1.5
+Open,IPA Tank Vent,,,0.0
+Open,IPA Fill Dump,,,0.0
+Open,IPA Main,,,0.0
+Wait,,,,1.5
+Close,IPA Tank Vent,,,0.0
+Close,IPA Fill Dump,,,0.0
+Close,IPA Main,,,0.0
+###
+Tank Vent
+Close,GN2 Main,,,0.0
+Wait,,,,1.0
+Open,IPA Tank Vent,,,0.0
+Open,LOX Tank Vent,,,0.0
+###
+Open close demo
+Open,IPA Main,,,0.0
+Wait,,,,2.0
+Close,IPA Main,,,0.0
+Wait,,,,2.0
+Open,LOX Main,,,0.0
+Wait,,,,2.0
+Close,LOX Main,,,0.0
+###
+Sequence 4
+Poll,,,,0.0
+Wait,,,,0.5
+Open,IPA Main,,,0.0
+Poll,,,,0.0
+Wait,,,,0.5
+Close,IPA Main,,,0.0
+Poll,,,,0.0
+Wait,,,,0.5
+###
+Ignition Test
+Poll,,,,0.0
+Wait,,,,0.5
+Open,IPA Purge,,,0.0
+Open,LOX Purge,,,0.0
+Wait,,,,0.75
+Poll,,,,0.0
+Wait,,,,0.75
+Close,IPA Purge,,,0.0
+Wait,IPA Purge,,,0.0
+Close,LOX Purge,,,0.0
+Wait,,,,0.0
+Open,LOX Main,,,0.0
+Wait,,,,0.5
+Fire,LOX Purge,,Pyro 0,0.0
+Wait,,,,1.0
+Open,IPA Main,,Pyro 0,0.0
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,LOX Main,,,2.0
+Close,IPA Main,,,0.0
+Close,LOX Main,,,0.0
+Open,LOX Purge,,,0.0
+Wait,IPA Purge,,,1.0
+Open,IPA Purge,,,0.0
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,,,,4.5
+Close,LOX Purge,,,0.0
+Close,IPA Purge,,,0.0
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,,,,0.0

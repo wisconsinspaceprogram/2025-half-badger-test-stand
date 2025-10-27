@@ -1,0 +1,12 @@
+../Core/Src/main.c:128:6:HAL_UART_RxCpltCallback	16	static
+../Core/Src/main.c:186:6:adc_init	0	static
+../Core/Src/main.c:196:10:read_adc_channel	0	static
+../Core/Src/main.c:204:9:parse_two_digit_decimal	0	static
+../Core/Src/main.c:211:19:save_persistent_data	32	static
+../Core/Src/main.c:248:6:load_persistent_data	16	static
+../Core/Src/main.c:270:5:parse_4digit_value	8	static
+../Core/Src/main.c:281:19:update_config_if_changed	8	static
+../Core/Src/main.c:289:9:validate_command	16	static
+../Core/Src/main.c:618:6:SystemClock_Config	56	static,ignoring_inline_asm
+../Core/Src/main.c:315:5:main	104	static,ignoring_inline_asm
+../Core/Src/main.c:802:6:Error_Handler	0	static,ignoring_inline_asm

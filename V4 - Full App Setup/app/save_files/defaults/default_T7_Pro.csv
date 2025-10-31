@@ -1,5 +1,5 @@
 50
-True,Thermocouple Type K,IPA Tank Bottom,,0.0,10.0,0.0,1000.0
+True,Thermocouple Type K,LOX Venturi,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,LOX Tank Top,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,Combustion Chamber,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,LOX Manifold,,0.0,10.0,0.0,1000.0

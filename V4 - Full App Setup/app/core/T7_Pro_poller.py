@@ -13,7 +13,7 @@ from core import utils
 tc_T = thermocouples["T"]
 tc_K = thermocouples["K"]
 
-SERIAL_NUMBER = 470022092
+SERIAL_NUMBER = 470012365
 
 # Variables for the T7
 daq_channel_numbers = [1, 2]
@@ -61,7 +61,7 @@ def get_unit(channel: int):
     try:
         return get_unit_from_type(daq_sensor_types[daq_channel_numbers.index(channel)])
     except Exception as e:
-        print("T7Poller, Get Unit   ", channel, daq_channel_numbers)
+        print("T7_Pro_Poller, Get Unit   ", channel, daq_channel_numbers)
         return ""
 
 
@@ -79,7 +79,7 @@ def update_log_name():
     this_file_dir = Path(__file__).parent
 
     t = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_file_name = this_file_dir.parent / "logs" / f"{t}_DAQ_T7.csv"
+    save_file_name = this_file_dir.parent / "logs" / f"{t}_DAQ_T7_Pro.csv"
 
 
 def write_headers():
@@ -221,7 +221,7 @@ def start_polling():
 
     try:
         while main_thread.is_alive():
-            print(T7_connected, "T7")
+            print(T7_connected, "T7_pro")
             if not T7_connected:
                 try:
                     # Remove with real data
@@ -236,7 +236,7 @@ def start_polling():
                     T7_connected = True
 
                 except Exception as e:
-                    print("T7 Poller, connection issue", e)
+                    print("T7 Pro Poller, connection issue", e)
                     time.sleep(0.5)
 
             else:
@@ -264,12 +264,12 @@ def start_polling():
                         # time.sleep(0.5)
 
                 except Exception as e:
-                    print("T7 Poller Error in process_data", e)
+                    print("T7 Pro Poller Error in process_data", e)
                     # print(traceback.print_exception())
                     time.sleep(0.1)
                     T7_connected = False
     except Exception as e:
-        print("T7 big loop:, ", e)
+        print("T7 Pro big loop:, ", e)
     finally:
         if T7 is not None:
             try:
@@ -342,7 +342,7 @@ def process_data(read_data):
                         processed_samples[i_sample][0][i_sensor] = read_data[i_sensor][i_sample]
 
                 except Exception as e:
-                    print("T7 Poller, error in processing loop: ", e)
+                    print("T7 Pro Poller, error in processing loop: ", e)
         # On last sensor (CJC read), we'll note the time instead, we just want to do this once per sample,
         else:
             # looping through each sample

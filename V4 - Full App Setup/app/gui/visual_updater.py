@@ -2,7 +2,7 @@ import math
 import threading
 import dearpygui.dearpygui as dpg
 import time
-from core import T7_poller, ECU_Poller, sequence_executer
+from core import T7_poller, T7_Pro_poller, ECU_Poller, sequence_executer
 from gui import main_tab
 
 startTime = time.time()
@@ -108,6 +108,85 @@ def update_thread():
                 for i in range(24):
                     if not ((i + 1) in active_channels) and dpg.does_item_exist(f"T7_CH{i+1}_main_plot"):
                         dpg.delete_item(f"T7_CH{i+1}_main_plot")
+
+                # T7 Pro Updater
+                active_channels = T7_Pro_poller.get_active_channels()
+                acctive_channel_locations = T7_Pro_poller.get_sensor_locations()
+
+                # pnid_data_tags = main_tab.get_pnid_data_tags()
+                # used_pnid_data_tags = []
+                for i in range(len(active_channels)):
+                    channel = active_channels[i]
+
+                    channel_unit = T7_Pro_poller.get_unit(channel)
+                    correct_axis = f"y_axis_{str.lower(channel_unit)}"
+                    series_tag = f"T7p_CH{channel}_main_plot"
+
+                    # Seeing if item is already plotted
+                    if dpg.does_item_exist(series_tag):
+                        # If exists, let's check it's parent axis
+                        if correct_axis != dpg.get_item_alias(dpg.get_item_parent(series_tag)):
+                            dpg.delete_item(series_tag)
+                            dpg.add_line_series(
+                                [],
+                                [],
+                                label=f"T7p_CH{channel}",
+                                parent=correct_axis,
+                                tag=series_tag,
+                                show=True,
+                            )
+                    else:
+                        dpg.add_line_series(
+                            [],
+                            [],
+                            label=f"T7p_CH{channel}",
+                            parent=correct_axis,
+                            tag=series_tag,
+                            show=True,
+                        )
+
+                    data = T7_Pro_poller.get_data(max(dpg.get_value("main_tab_seconds_lookback"), 1), channel)
+                    dpg.set_value(series_tag, data)
+                    dpg.configure_item(series_tag, label=acctive_channel_locations[i])
+
+                    # Setting the data displays on the PNID
+                    if len(data[1]) > 0:
+                        found = False
+                        for tag in pnid_data_tags:
+                            # removing the PNID_ prefix on the data label tag
+                            trimmed = tag[5:]
+
+                            # if the location prefix matches the data location, and has not been used, data tags have _x suffix
+                            if trimmed.startswith(acctive_channel_locations[i].lower()) and not tag in used_pnid_data_tags:
+                                used_pnid_data_tags.append(tag)
+                                dpg.set_value(tag, str(sigfig_round(data[1][0], 3)) + channel_unit)
+                                found = True
+                                break
+
+                        if not found:
+                            for tag in pnid_data_tags:
+                                trimmed = tag[5:]
+                                # if the location is custom, we'll just find the first custom location tag to put in it in
+                                # and label the respective location with text
+                                if trimmed.startswith("custom") and not tag in used_pnid_data_tags:
+                                    used_pnid_data_tags.append(tag)
+                                    dpg.set_value(
+                                        tag,
+                                        acctive_channel_locations[i] + ": " + str(sigfig_round(data[1][0], 3)) + channel_unit,
+                                    )
+                                    found = True
+                                    break
+
+                for tag in pnid_data_tags:
+                    if tag in used_pnid_data_tags:
+                        dpg.show_item(tag)
+                    else:
+                        dpg.hide_item(tag)
+
+                # Deleting any disabled channels from the plots
+                for i in range(24):
+                    if not ((i + 1) in active_channels) and dpg.does_item_exist(f"T7p_CH{i+1}_main_plot"):
+                        dpg.delete_item(f"T7p_CH{i+1}_main_plot")
 
             # Updating the ECU data every 0.05 seconds
             if cur_time - last_main_ecu_update > 0.05:

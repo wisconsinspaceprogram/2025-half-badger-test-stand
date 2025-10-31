@@ -2,7 +2,7 @@ import threading
 import time
 import dearpygui.dearpygui as dpg
 from gui import tabs, visual_updater
-from core import T7_poller, ECU_Poller, sequence_executer
+from core import T7_poller, T7_Pro_poller, ECU_Poller, sequence_executer
 
 dpg.create_context()
 
@@ -24,6 +24,7 @@ def main():
 
     # Starting the DAQ and ECU pollers to retrive data in the background
     threading.Thread(target=T7_poller.start_polling, daemon=False).start()
+    threading.Thread(target=T7_Pro_poller.start_polling, daemon=False).start()
     threading.Thread(target=ECU_Poller.start_ecu_communication, daemon=False).start()
     threading.Thread(target=sequence_executer.start_sequence_runner, daemon=False).start()
 

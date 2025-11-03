@@ -12,6 +12,8 @@ sequence_custom_valve_locations = []
 sequence_pyro_tags = []
 sequence_delay_tags = []
 sequence_step_delete_tags = []
+sequence_move_up_tags = []
+sequence_move_down_tags = []
 
 active_sequence = ""
 
@@ -72,6 +74,7 @@ def callback_add_sequence():
         dpg.add_table_column(label="Sequence Step", init_width_or_weight=0.1)
         dpg.add_table_column(label="Step Command", init_width_or_weight=0.9)
         dpg.add_table_column(label="Delete Step", init_width_or_weight=0.05)
+        dpg.add_table_column(label="Move Step", init_width_or_weight=0.05)
 
     sequence_list_tags.append(tag)
     sequence_names.append(f"Sequence {len(sequence_list_tags)}")
@@ -83,6 +86,8 @@ def callback_add_sequence():
     sequence_pyro_tags.append([])
     sequence_delay_tags.append([])
     sequence_step_delete_tags.append([])
+    sequence_move_up_tags.append([])
+    sequence_move_down_tags.append([])
 
 
 def callback_update_name():
@@ -160,6 +165,8 @@ def callback_remove_step(Sender, app_data, user_data):
     dpg.delete_item(sequence_pyro_tags[sequence_index][-1])
     dpg.delete_item(sequence_delay_tags[sequence_index][-1])
     dpg.delete_item(sequence_step_delete_tags[sequence_index][-1])
+    dpg.delete_item(sequence_move_up_tags[sequence_index][-1])
+    dpg.delete_item(sequence_move_down_tags[sequence_index][-1])
     dpg.delete_item(parent_row)
 
     sequence_number_tags[sequence_index].pop()
@@ -169,6 +176,61 @@ def callback_remove_step(Sender, app_data, user_data):
     sequence_pyro_tags[sequence_index].pop()
     sequence_delay_tags[sequence_index].pop()
     sequence_step_delete_tags[sequence_index].pop()
+    sequence_move_up_tags[sequence_index].pop()
+    sequence_move_down_tags[sequence_index].pop()
+
+
+def swap_step_data(sequence_index, step_a, step_b):
+    tags_a = [
+        sequence_operation_tags[sequence_index][step_a],
+        sequence_valve_tags[sequence_index][step_a],
+        sequence_custom_valve_locations[sequence_index][step_a],
+        sequence_pyro_tags[sequence_index][step_a],
+        sequence_delay_tags[sequence_index][step_a],
+    ]
+    tags_b = [
+        sequence_operation_tags[sequence_index][step_b],
+        sequence_valve_tags[sequence_index][step_b],
+        sequence_custom_valve_locations[sequence_index][step_b],
+        sequence_pyro_tags[sequence_index][step_b],
+        sequence_delay_tags[sequence_index][step_b],
+    ]
+
+    # Swap widget values and visibility
+    for tag_a, tag_b in zip(tags_a, tags_b):
+        val_a = dpg.get_value(tag_a)
+        val_b = dpg.get_value(tag_b)
+        dpg.set_value(tag_a, val_b)
+        dpg.set_value(tag_b, val_a)
+
+        vis_a = dpg.is_item_visible(tag_a)
+        vis_b = dpg.is_item_visible(tag_b)
+        dpg.configure_item(tag_a, show=vis_b)
+        dpg.configure_item(tag_b, show=vis_a)
+
+
+def callback_move_step_up(sender, app_data, user_data=None):
+    """Moves a step one position up in its sequence (ignored if at top)."""
+    for seq_idx, move_tags in enumerate(sequence_move_up_tags):
+        if sender in move_tags:
+            step_idx = move_tags.index(sender)
+            # Don't move if already the first step
+            if step_idx == 0:
+                return
+            swap_step_data(seq_idx, step_idx, step_idx - 1)
+            return
+
+
+def callback_move_step_down(sender, app_data, user_data=None):
+    """Moves a step one position down in its sequence (ignored if at bottom)."""
+    for seq_idx, move_tags in enumerate(sequence_move_down_tags):
+        if sender in move_tags:
+            step_idx = move_tags.index(sender)
+            # Don't move if already the last step
+            if step_idx >= len(sequence_move_down_tags[seq_idx]) - 1:
+                return
+            swap_step_data(seq_idx, step_idx, step_idx + 1)
+            return
 
 
 def add_blank_sequence_row():
@@ -208,6 +270,13 @@ def add_blank_sequence_row():
             dpg.add_button(label="X", callback=callback_remove_step, user_data=(index, len(sequence_number_tags[index]) - 1), tag=delete_tag)
             sequence_step_delete_tags[index].append(delete_tag)
 
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="^", tag=f"{step_tag}_up_tag", callback=callback_move_step_up)
+                dpg.add_button(label="v", tag=f"{step_tag}_down_tag", callback=callback_move_step_down)
+
+                sequence_move_up_tags[index].append(f"{step_tag}_up_tag")
+                sequence_move_down_tags[index].append(f"{step_tag}_down_tag")
+
 
 def callback_delete_sequence_button():
     if active_sequence != "":
@@ -243,6 +312,8 @@ def callback_confirm_delete():
     sequence_pyro_tags.pop(old_index)
     sequence_delay_tags.pop(old_index)
     sequence_step_delete_tags.pop(old_index)
+    sequence_move_up_tags.pop(old_index)
+    sequence_move_down_tags.pop(old_index)
 
 
 def callback_cancel_delete():

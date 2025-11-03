@@ -101,8 +101,10 @@ def start_sequence_runner():
                     if sequences[active_sequence_index][active_sequence_step][0] == "Fire":
                         ECU_Poller.fire_pyro(int(sequences[active_sequence_index][active_sequence_step][3][5:6]))
 
-                    # Delay setting shit
-                    next_step_time = time.time() + sequences[active_sequence_index][active_sequence_step][4]
+                    if sequences[active_sequence_index][active_sequence_step][0] == "Delay":
+                        # Delay setting shit
+                        next_step_time = time.time() + sequences[active_sequence_index][active_sequence_step][4]
+
                     active_sequence_step += 1
 
         else:

@@ -1,6 +1,7 @@
 import dearpygui.dearpygui as dpg
 from pathlib import Path
 from core import T7_poller
+from gui import main_tab
 
 save_config_data = ""
 
@@ -8,21 +9,6 @@ save_config_data = ""
 def get_sensor_type_list():
     # Callback to core logic to get programmed sensor types
     return ["Pressure Transducer", "Thermocouple Type T", "Thermocouple Type K", "Load Cell", "Voltage"]
-
-
-def get_physical_sensor_locations():
-    return [
-        "-",
-        "LOX Tank Top",
-        "LOX Tank Bottom",
-        "LOX Venturi",
-        "LOX Manifold",
-        "IPA Manifold",
-        "IPA Tank Bottom",
-        "IPA Tank Top",
-        "Combustion Chamber",
-        "Custom",
-    ]
 
 
 def get_sensor_type(channel: int):
@@ -283,7 +269,7 @@ def build():
                     with dpg.group(horizontal=True):
                         custom_input = dpg.add_input_text(label="", hint="Custom Location", show=False, tag="custom_loc_" + row_string)
                         location_combo = dpg.add_combo(
-                            get_physical_sensor_locations(),
+                            main_tab.get_possible_valve_locations() + ["Custom"],
                             default_value="-",
                             callback=custom_location_combo_callback,
                             user_data=custom_input,

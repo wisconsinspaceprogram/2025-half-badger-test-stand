@@ -1,23 +1,9 @@
 import dearpygui.dearpygui as dpg
 from pathlib import Path
 from core import ECU_Poller
+from gui import main_tab
 
-valve_locations = [
-    "GN2 Main",
-    "LOX Purge",
-    "IPA Purge",
-    "LOX Tank Vent",
-    "LOX Fill",
-    "LOX Fill Vent",
-    "LOX Venturi Iso",
-    "LOX Venturi Vent",
-    "LOX Main",
-    "IPA Tank Vent",
-    "IPA Fill Dump",
-    "IPA Main",
-    "Not Connected",
-    "Custom",
-]
+
 valve_save_data = ""
 
 
@@ -162,7 +148,7 @@ def build():
                     with dpg.group(horizontal=True):
                         custom_input = dpg.add_input_text(label="", hint="Custom Location", show=False, tag=f"custom_loc_valve_{i}")
                         location_combo = dpg.add_combo(
-                            valve_locations,
+                            main_tab.get_possible_valve_locations() + ["Custom"],
                             default_value="Not Connected",
                             callback=custom_location_combo_callback,
                             user_data=custom_input,

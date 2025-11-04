@@ -1,6 +1,7 @@
 import dearpygui.dearpygui as dpg
 from pathlib import Path
 from core import sequence_executer
+from gui import main_tab
 
 sequence_list_tags = []
 sequence_names = []
@@ -19,21 +20,6 @@ active_sequence = ""
 
 save_sequence_data = ""
 
-sequence_valve_locations = [
-    "GN2 Main",
-    "LOX Purge",
-    "IPA Purge",
-    "LOX Tank Vent",
-    "LOX Fill",
-    "LOX Fill Vent",
-    "LOX Venturi Iso",
-    "LOX Venturi Vent",
-    "LOX Main",
-    "IPA Tank Vent",
-    "IPA Fill Dump",
-    "IPA Main",
-    "Custom",
-]
 pyro_options = ["Pyro 0", "Pyro 1"]
 
 
@@ -255,7 +241,7 @@ def add_blank_sequence_row():
                     user_data=step_tag,
                     show=True,
                 )
-                dpg.add_combo(sequence_valve_locations, width=150, tag=valve_tag, show=False)
+                dpg.add_combo(main_tab.get_possible_valve_locations() + ["Custom"], width=150, tag=valve_tag, show=False)
                 dpg.add_input_text(default_value="", hint="Custom Location", width=150, tag=custom_valve_tag, show=False)
                 dpg.add_combo(pyro_options, width=150, tag=pyro_tag, show=False)
                 dpg.add_input_double(label="Seconds", width=100, min_value=0, tag=delay_tag, show=False)

@@ -6,6 +6,9 @@ from gui import pnid_setups
 pnid_data_tags = []
 pnid_valve_tags = []
 
+possible_valve_locations = []
+possible_sensor_locations = []
+
 
 def get_pnid_data_tags():
     return pnid_data_tags
@@ -75,13 +78,22 @@ def make_pnid_valve_icons(location: str, start: tuple, offset: tuple):
             dpg.draw_circle((12.5, 12.5), radius=11, color=(255, 0, 0, 255), fill=(255, 0, 0, 200), tag=tag + "_actual")
 
 
+def get_possible_valve_locations():
+    return possible_valve_locations
+
+
+def get_possible_sensor_locations():
+    return possible_sensor_locations
+
+
 def build():
-    global pnid_data_tags, pnid_valve_tags
+    global pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations
 
     with dpg.tab(label="Home", tag="main_tab"):
 
         # Build the desired PNID setup
-        pnid_data_tags, pnid_valve_tags = pnid_setups.build_full_setup()
+        # pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_full_setup()
+        pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_nov_9_hotfire_setup()
 
         with dpg.group(pos=(25, 50)):
             with dpg.table(

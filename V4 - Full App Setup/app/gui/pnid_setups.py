@@ -81,7 +81,7 @@ def build_full_setup():
         "LOX Fill Vent",
         "LOX Tank Vent",
     ]
-    sensor_locs = [
+    sensor_locs = [ 
         "LOX Tank Top",
         "LOX Tank Bottom",
         "LOX Venturi",
@@ -139,6 +139,7 @@ def build_nov_9_hotfire_setup():
         "LOX Fill",
         "LOX Fill Vent",
         "LOX Tank Vent",
+        "Not Connected"
     ]
     sensor_locs = [
         "LOX Tank Top",
@@ -150,6 +151,7 @@ def build_nov_9_hotfire_setup():
         "IPA Tank Top",
         "Combustion Chamber",
         "Custom",
+        "Not Connected"
     ]
 
     return pnid_data_tags, pnid_valve_tags, valve_locs, sensor_locs

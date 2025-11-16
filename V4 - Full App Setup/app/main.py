@@ -18,7 +18,7 @@ def main():
         no_move=True,
     ):
         tabs.build_tabs()
-        tabs.load_defaults()
+        tabs.load_defaults()    
 
     dpg.create_viewport(title="Kick-ass control app", width=1800, height=1000)
 

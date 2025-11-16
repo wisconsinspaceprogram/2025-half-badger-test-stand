@@ -3,7 +3,7 @@
 
 uint8_t valveStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 uint8_t valvePins[12] = { 13, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-bool valveIsCryo[12] = { true, false, false, false, false, false, false, false, false, false, false, false };
+bool valveIsCryo[12] = { true, true, true, true, true, true, true, true, true, true, true, false };
 float valveAngle[12] = {};
 bool valveClosing[12] = {};
 bool needsOpeningBackoff[12] = {};
@@ -47,11 +47,11 @@ float nonCryo_openBackoffDelay = 2;
 float nonCryo_closeBackoffDelay = 0.5;
 
 int cryo_open = 160;
-int cryo_mostlyClosed = 30;
+int cryo_mostlyClosed = 50;
 int cryo_closed = 10;
 int cryo_closeBackoff = 2;
 int cryo_openBackoff = 2;
-float cryo_openBackoffDelay = 2;
+float cryo_openBackoffDelay = 2.5;
 float cryo_closeBackoffDelay = 0.5;
 
 

@@ -175,7 +175,7 @@ def configure_T7():
     for sensor in daq_sensor_types:
         aRangeValues.append(0.1 if (sensor == "Thermocouple Type T" or sensor == "Thermocouple Type K") else 10.0)
     aRangeValues.append(10)  # CJC Ain14 range
-    aRangeValues.append(8)  # Stream resolution index
+    aRangeValues.append(0)  # Stream resolution index
 
     # aRangeValues = [1.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1, 1, 10, 0]
 
@@ -188,7 +188,7 @@ def configure_T7():
             aRangeNames.append(f"{ain}_NEGATIVE_CH")
             aRangeValues.append(199)
         aRangeNames.append("STREAM_SETTLING_US")
-        aRangeValues.append(10)
+        aRangeValues.append(0)
 
     numFrames = len(aRangeNames)
     ljm.eWriteNames(T7, numFrames, aRangeNames, aRangeValues)

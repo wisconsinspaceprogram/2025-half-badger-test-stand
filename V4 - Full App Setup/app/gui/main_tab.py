@@ -90,6 +90,8 @@ def build():
     global pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations
 
     with dpg.tab(label="Home", tag="main_tab"):
+        # Timestamp label
+        dpg.add_text("", tag="main_tab_timestamp", pos=(1750, 10))
 
         # Build the desired PNID setup
         # pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_full_setup()

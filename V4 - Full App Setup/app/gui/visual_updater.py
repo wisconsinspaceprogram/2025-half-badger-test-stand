@@ -26,6 +26,8 @@ def update_thread():
 
         cur_time = time.time()
         if dpg.get_value("main_tab"):
+            # Update timestamp every loop, show milliseconds
+            dpg.set_value("main_tab_timestamp", time.strftime("%Y-%m-%d %H:%M:%S.") + f"{int((cur_time % 1) * 1000):03d}")
             # Update main plot every 0.1 seconds
             if cur_time - last_main_plot_update > 0.1:
                 last_main_plot_update = cur_time

@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import os
 from pathlib import Path
 import random
 from labjack import ljm
@@ -14,6 +15,9 @@ tc_T = thermocouples["T"]
 tc_K = thermocouples["K"]
 
 SERIAL_NUMBER = 470022092
+
+MAX_BUFFER_SIZE = 1_000_000  # Max number of samples to keep in memory
+MAX_FILE_SIZE = 10_000_000  # Max size of log file in bytes
 
 # Variables for the T7
 daq_channel_numbers = [1, 2]
@@ -356,6 +360,9 @@ def process_data(read_data):
     for sample in processed_samples:
         processed_buffer.append(sample)
 
+    if len(processed_buffer) > MAX_BUFFER_SIZE:
+        processed_buffer = processed_buffer[-MAX_BUFFER_SIZE :] 
+
     with file_lock:
         with open(save_file_name, "a") as f:
             out_string = ""
@@ -366,6 +373,13 @@ def process_data(read_data):
                 out_string = out_string[0:-1] + "\n"
 
             f.write(out_string)
+
+    size_bytes = os.path.getsize(save_file_name)
+    print(size_bytes, "bytes")
+
+    if size_bytes > MAX_FILE_SIZE:  # 10 MB
+        update_log_name()
+        write_headers()
 
 
 def fake_process_data():

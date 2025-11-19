@@ -498,7 +498,6 @@ int main(void)
 	          int32_t delta = (int32_t)(error - last_error);
 	          rolling_delta_error = (rolling_delta_error * (100 - alpha) + delta * alpha) / 100;
 	          last_deriv_tick = tick;
-	          last_error = error;
 	      }
 
 	      // Only running the control loop if we determined we havne't hit the target
@@ -549,6 +548,8 @@ int main(void)
 	      if(!enabled){
 	    	  speed = 0;
 	      }
+
+	      last_error = error;
 
 	      if(speed > 0){
 	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);

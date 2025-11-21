@@ -158,13 +158,19 @@ def build():
 
             dpg.add_checkbox(label="Autofit Graphs", default_value=True, callback=set_plot_autofit)
 
-        with dpg.plot(label="Pressure Transducers & Load Cells", height=300, width=600, tag="pt_lc_plot", pos=(1250, 100)):
+            with dpg.group(horizontal=True):
+                dpg.add_text("Number of samples to average/smooth over:")
+                dpg.add_input_int(default_value=5, width=100, min_value=1, tag="smooth_samples_input")
+
+            dpg.add_checkbox(label="Smoothed Values", default_value=False, tag="smoothed_checkbox")
+
+        with dpg.plot(label="Pressure Transducers & Load Cells", height=300, width=600, tag="pt_lc_plot", pos=(1250, 150)):
             dpg.add_plot_legend()
             dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag="x_axis_1", auto_fit=True)
             dpg.add_plot_axis(dpg.mvYAxis, label="Pressure (psi)", tag="y_axis_psi", auto_fit=True)
             dpg.add_plot_axis(dpg.mvYAxis2, label="Force (lbs)", tag="y_axis_lbs", auto_fit=True, opposite=True)
 
-        with dpg.plot(label="Thermocouples & Voltages", height=300, width=600, tag="tc_v_plot", pos=(1250, 400)):
+        with dpg.plot(label="Thermocouples & Voltages", height=300, width=600, tag="tc_v_plot", pos=(1250, 450)):
             dpg.add_plot_legend()
             dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag="x_axis_2", auto_fit=True)
             dpg.add_plot_axis(dpg.mvYAxis, label="Temperature (C)", tag="y_axis_c", auto_fit=True)

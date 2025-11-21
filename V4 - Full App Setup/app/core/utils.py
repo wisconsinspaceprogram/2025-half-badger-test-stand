@@ -137,3 +137,18 @@ def c_to_mv_type_t(temp_c: float) -> float:
     for i, coef in enumerate(c):
         mv += coef * (temp_c**i)
     return mv
+
+# Moving Average Calculator 
+# data should be a 1D list
+# length should be a smoothing period
+def smooth_list(data: list,length: int):
+    new_data = []
+    if length >= len(data):
+        pass
+    else:
+        for i in range(len(data)):
+            largest_number = max(0, i - length + 1)
+            window = data[largest_number:i+1]
+            new_data.append(sum(window) / len(window))
+    return new_data
+

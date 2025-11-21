@@ -2,7 +2,7 @@ import math
 import threading
 import dearpygui.dearpygui as dpg
 import time
-from core import T7_poller, T7_Pro_poller, ECU_Poller, sequence_executer
+from core import T7_poller, T7_Pro_poller, ECU_Poller, sequence_executer, utils
 from gui import main_tab
 
 startTime = time.time()
@@ -38,6 +38,13 @@ def update_thread():
 
                 pnid_data_tags = main_tab.get_pnid_data_tags()
                 used_pnid_data_tags = []
+
+                # Smoothing Fun
+                smoothed_boolean = dpg.get_value("smoothed_checkbox")
+                smooth_length = abs(dpg.get_value("smooth_samples_input"))
+                if smooth_length == 0:
+                    smooth_length = 1
+
                 for i in range(len(active_channels)):
                     channel = active_channels[i]
 
@@ -68,7 +75,17 @@ def update_thread():
                             show=True,
                         )
 
-                    data = T7_poller.get_data(max(dpg.get_value("main_tab_seconds_lookback"), 1), channel)
+                    raw_data = T7_poller.get_data(max(dpg.get_value("main_tab_seconds_lookback"), 1), channel)
+                    
+                    #here for smooth
+                    smooth_y=[]
+                    if smoothed_boolean:
+                        smooth_y = utils.smooth_list(raw_data[1],smooth_length)
+                    else:
+                        smooth_y = raw_data[1]
+
+                    data = (raw_data[0], smooth_y)
+  
                     dpg.set_value(series_tag, data)
                     dpg.configure_item(series_tag, label=acctive_channel_locations[i])
 
@@ -189,7 +206,7 @@ def update_thread():
                 for i in range(24):
                     if not ((i + 1) in active_channels) and dpg.does_item_exist(f"T7p_CH{i+1}_main_plot"):
                         dpg.delete_item(f"T7p_CH{i+1}_main_plot")
-
+        
             # Updating the ECU data every 0.05 seconds
             if cur_time - last_main_ecu_update > 0.05:
                 last_main_ecu_update = cur_time
@@ -288,3 +305,5 @@ def update_thread():
                     dpg.set_value(f"reading_T7_CH{channel}", f"{value:.2f} {channel_unit}")
 
         time.sleep(0.01)
+        
+

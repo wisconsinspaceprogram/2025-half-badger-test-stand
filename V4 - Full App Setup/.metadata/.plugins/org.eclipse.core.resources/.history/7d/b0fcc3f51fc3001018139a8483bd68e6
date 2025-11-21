@@ -1,0 +1,829 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * Copyright (c) 2025 STMicroelectronics.
+  * All rights reserved.
+  *
+  * This software is licensed under terms that can be found in the LICENSE file
+  * in the root directory of this software component.
+  * If no LICENSE file comes with this software, it is provided AS-IS.
+  *
+  ******************************************************************************
+  */
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
+#include "main.h"
+
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+#include <stdio.h>
+#include <stdlib.h>
+/* USER CODE END Includes */
+
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
+
+/* USER CODE END PD */
+
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+
+TIM_HandleTypeDef htim3;
+
+UART_HandleTypeDef huart2;
+
+/* USER CODE BEGIN PV */
+
+#define FLASH_PERSIST_ADDR 0x08003C00  // Example: last 1 KB of 16 KB flash
+
+typedef struct {
+    uint32_t magic;      // optional, used to check if flash is initialized
+    uint16_t address;
+    uint16_t angleOpen;
+    uint16_t angleClose;
+    uint16_t Kp;
+    uint16_t Kd;
+    uint16_t errorTol;
+    uint16_t errorTolChange;
+    uint16_t extraVal;
+
+} PersistentConfig;
+
+#define MAGIC_VALUE 0xDEADBEEF
+
+PersistentConfig config = {
+    .magic = MAGIC_VALUE,
+    .address = 99,
+    .angleOpen = 1024,
+    .angleClose = 2048,
+    .Kp = 3,
+    .Kd = 1000,
+    .errorTol = 5,
+    .errorTolChange = 1
+};
+
+#define IS_DIGIT(c) ((c) >= '0' && (c) <= '9')
+
+
+//#define DEVICE_ADDRESS 12 // Between 12 - 23, 0-11 are reserved for on ECU servo connections
+
+#define RX_BUFFER_SIZE 16
+uint8_t rx_byte;
+volatile uint8_t rx_buffer[RX_BUFFER_SIZE];
+volatile uint8_t rx_buffer_index = 0;
+volatile uint8_t command_buffer[RX_BUFFER_SIZE];
+volatile uint8_t command_int = 0;
+
+uint32_t last_toggle_time = 0;
+char uart_buf[32];
+
+volatile uint16_t targetAngle = 1000;
+volatile int16_t target_hit = 1;
+
+#define SCALE_PD 1000
+//#define Kp (4 * SCALE_PD)
+//#define Kd (500 * SCALE_PD)
+
+int32_t rolling_delta_error = 0;
+int32_t alpha = 1;
+//#define Ki (0)
+
+volatile uint8_t enabled = 1; // 1 = enabled, 0 = disabled, no power will be given to the motor
+
+volatile uint8_t debug = 0; // 0 = normal, 1 = debug mode
+
+
+
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_USART2_UART_Init(void);
+/* USER CODE BEGIN PFP */
+
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+
+// Called on each byte received
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+//	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+//			HAL_UART_Transmit(&huart2, &rx_byte, 1, HAL_MAX_DELAY);
+	//Running the code on USART1 only, (the raw uart line coming in), will need more logic when coming over RS485 bus
+	if(huart->Instance == USART2){
+
+		char c = (char)rx_byte;
+//		if(c == '1'){
+//			targetAngle = 3000;
+//			target_hit = 0;
+//		} else if (c == '0'){
+//			targetAngle = 1000;
+//			target_hit = 0;
+//		}
+//		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+//		HAL_UART_Transmit(&huart2, &rx_byte, 1, HAL_MAX_DELAY);
+		if(c == '{'){
+			rx_buffer_index = 1;
+			rx_buffer[0] = rx_byte;
+		} else if (c == '}'){
+			//End of command, copy to command_buffer
+			rx_buffer[rx_buffer_index] = rx_byte;
+
+			for(int i = 0; i < RX_BUFFER_SIZE; i++){
+				if(i <= rx_buffer_index){
+					command_buffer[i] = rx_buffer[i];
+				} else {
+					command_buffer[i] = 0;
+				}
+			}
+
+			if ((char)command_buffer[1] != '}' && (char)command_buffer[0] == '{' && (char)command_buffer[3] == ',') {
+			    command_int = (command_buffer[4] - '0') * 10 + (command_buffer[5] - '0'); // now supports 2-digit commands
+			} else {
+			    command_int = 0;
+			}
+
+			rx_buffer_index = 0;
+		} else {
+			rx_buffer[rx_buffer_index] = rx_byte;
+			rx_buffer_index++;
+
+			// Start re-writing the buffer if we over-flow, note that this will fail to generate a
+			// command_int due to the missing { at the start of the command
+			if(rx_buffer_index >= RX_BUFFER_SIZE){
+				rx_buffer_index = 0;
+			}
+		}
+
+
+		// Restarting the interupt loop
+		HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+	}
+
+}
+
+// Minimal ADC1 initialization for STM32C0 series
+void adc_init(void)
+{
+    RCC->APBENR2 |= RCC_APBENR2_ADCEN;  // enable ADC clock
+    ADC1->CR &= ~ADC_CR_ADEN;           // ensure ADC is off
+    ADC1->CFGR1 = 0;                    // single conversion, right-aligned
+    ADC1->CHSELR = 0;                   // no channel selected yet
+    ADC1->CR |= ADC_CR_ADEN;            // enable ADC
+}
+
+// --- Read ADC channel without HAL ADC_ConfigChannel overhead ---
+uint16_t read_adc_channel(uint32_t channel)
+{
+    ADC1->CHSELR = 1U << channel;       // select PA12 = channel 4
+    ADC1->CR |= ADC_CR_ADSTART;          // start conversion
+    while (!(ADC1->ISR & ADC_ISR_EOC)); // wait for conversion complete
+    return ADC1->DR;                     // read result
+}
+
+uint8_t parse_two_digit_decimal(char high, char low) {
+    if (high < '0' || high > '9' || low < '0' || low > '9')
+        return 0; // invalid
+
+    return (high - '0') * 10 + (low - '0');
+}
+
+HAL_StatusTypeDef save_persistent_data(void) {
+    HAL_StatusTypeDef status;
+    FLASH_EraseInitTypeDef EraseInitStruct;
+    uint32_t PageError = 0;
+
+    HAL_FLASH_Unlock();
+
+    // Configure erase for STM32C0 (2 KB pages)
+    EraseInitStruct.TypeErase = FLASH_TYPEERASE_PAGES;
+    EraseInitStruct.Page = (FLASH_PERSIST_ADDR - FLASH_BASE) / FLASH_PAGE_SIZE;
+    EraseInitStruct.NbPages = 1;
+
+    status = HAL_FLASHEx_Erase(&EraseInitStruct, &PageError);
+    if (status != HAL_OK) {
+        HAL_FLASH_Lock();
+        return status;
+    }
+
+    // Write as 64-bit (double word)
+    uint64_t *data_ptr = (uint64_t *)&config;
+    uint32_t addr = FLASH_PERSIST_ADDR;
+    uint32_t doublewords = (sizeof(PersistentConfig) + 7) / 8; // round up
+
+    for (uint32_t i = 0; i < doublewords; i++) {
+        status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, addr, data_ptr[i]);
+        if (status != HAL_OK) {
+            HAL_FLASH_Lock();
+            return status;
+        }
+        addr += 8; // must increment by 8 for double word
+    }
+
+    HAL_FLASH_Lock();
+    return HAL_OK;
+}
+
+
+void load_persistent_data(void) {
+    PersistentConfig *flash_data = (PersistentConfig *)FLASH_PERSIST_ADDR;
+
+    if (flash_data->magic == MAGIC_VALUE) {
+        // Flash has valid data
+        memcpy(&config, flash_data, sizeof(PersistentConfig));
+    } else {
+        // First time boot or flash erased -> initialize defaults
+    	config.magic = MAGIC_VALUE;
+    	config.address = 99;
+    	config.angleOpen = 1024;
+    	config.angleClose = 2048;
+    	config.Kp = 3;
+    	config.Kd = 1000;
+    	config.errorTol = 5;
+    	config.errorTolChange = 1;
+
+        // Save to flash so next boot reads these values
+        save_persistent_data();
+    }
+}
+
+int parse_4digit_value(uint8_t *buf, uint16_t *out) {
+    for (int i = 0; i < 4; i++) {
+        if (buf[i] < '0' || buf[i] > '9') {
+            return 0; // invalid
+        }
+    }
+    *out = (buf[0]-'0')*1000 + (buf[1]-'0')*100 + (buf[2]-'0')*10 + (buf[3]-'0');
+    return 1; // success
+}
+
+// Updates a config value and only saves to flash if changed
+HAL_StatusTypeDef update_config_if_changed(uint16_t *field, uint16_t new_value) {
+    if (*field != new_value) {
+        *field = new_value;
+        return save_persistent_data();
+    }
+    return HAL_OK; // no change, no flash write
+}
+
+uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+    // Ensure start '{' and minimal length
+    if(buf[0] != '{') return 0;
+
+    // Validate address: 2 digits
+    if(!IS_DIGIT(buf[1]) || !IS_DIGIT(buf[2])) return 0;
+
+    uint8_t addr = parse_two_digit_decimal(buf[1], buf[2]);
+    if(addr != config.address) return 0; // Not for this device
+
+    // For commands 21-28, ensure 4-digit value exists
+    if(command_int >= 21 && command_int <= 28) {
+        for(int i=7; i<=10; i++) {
+            if(!IS_DIGIT(buf[i])) return 0;
+        }
+    }
+
+    return 1; // valid
+}
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+  MX_USART2_UART_Init();
+  /* USER CODE BEGIN 2 */
+
+  load_persistent_data();
+
+  adc_init();
+
+  // Start UART reception in interrupt mode (1 byte at a time)
+  // This gets restarted in the interup function
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
+
+
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+
+  uint32_t last_print = 0;
+  //uint16_t last_dir_change = 0;
+  int16_t last_error = 0;
+//  int32_t error_integral = 0;
+
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 999);
+
+//  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+//  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 500);
+
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+  while (1) {
+
+	  // Reading the pot value, outputs 0-4096 mapping 0-3.3v, there is slight deadband between 0-150 ish
+	  	      uint16_t adc_value = read_adc_channel(12);
+
+	  	  if(command_int != 0){
+    uint8_t valid = validate_command(command_buffer, command_int);
+
+    if(!valid){
+        //HAL_UART_Transmit(&huart2, (uint8_t*)"BAD_CMD\r\n", 9, HAL_MAX_DELAY);
+        command_int = 0;
+        continue;
+    }
+
+    uint16_t command_value = 0;
+    if(command_int >= 21 && command_int <= 28){
+        command_value = (command_buffer[7]-'0')*1000 +
+                        (command_buffer[8]-'0')*100 +
+                        (command_buffer[9]-'0')*10 +
+                        (command_buffer[10]-'0');
+    }
+
+    switch(command_int){
+        case 1: targetAngle = config.angleOpen; target_hit = 0; break;
+        case 2: targetAngle = config.angleClose; target_hit = 0; break;
+        case 21: update_config_if_changed(&config.angleOpen, command_value); break;
+        case 22: update_config_if_changed(&config.angleClose, command_value); break;
+        case 23: update_config_if_changed(&config.Kp, command_value); break;
+        case 24: update_config_if_changed(&config.Kd, command_value); break;
+        case 25: update_config_if_changed(&config.errorTol, command_value); break;
+        case 26: update_config_if_changed(&config.errorTolChange, command_value); break;
+        case 27: update_config_if_changed(&config.extraVal, command_value); break;
+        case 28: update_config_if_changed(&config.address, command_value); break;
+        case 29: debug = 1; break;
+        case 30: debug = 0; break;
+
+        case 31: {
+            uint16_t vals[] = { config.address, config.angleOpen, config.angleClose,
+                                config.Kp, config.Kd, config.errorTol,
+                                config.errorTolChange, config.extraVal, enabled };
+            for(int i=0;i<8;i++){
+                char buf[6];
+                int pos=0;
+                uint16_t val=vals[i];
+                if(val==0) buf[pos++]='0';
+                else {
+                    char temp[5]; int tpos=0;
+                    while(val>0){ temp[tpos++]= '0'+(val%10); val/=10; }
+                    for(int j=tpos-1;j>=0;j--) buf[pos++]=temp[j];
+                }
+                buf[pos++]=','; HAL_UART_Transmit(&huart2,(uint8_t*)buf,pos,HAL_MAX_DELAY);
+            }
+            HAL_UART_Transmit(&huart2,(uint8_t*)"\r\n",2,HAL_MAX_DELAY);
+            break;
+        }
+
+        case 32:  // Report valve position
+        {
+            // Convert currentAngle (adc_value) into a 0–100% range between closed and open
+            int32_t range = (int32_t)config.angleOpen - (int32_t)config.angleClose;
+            int32_t offset = (int32_t)adc_value - (int32_t)config.angleClose;
+
+            int32_t percent = 0;
+            if (range != 0)
+                percent = (offset * 100) / range;  // 0 = fully closed, 100 = fully open
+
+            // Map it to 50–150 (clamped 0–200)
+            int32_t output_val = percent + 50;
+            if (output_val < 0) output_val = 0;
+            if (output_val > 200) output_val = 200;
+
+            // Manual UART formatting (no sprintf)
+            char msg[20];
+            uint8_t len = 0;
+
+            msg[len++] = '{';
+            msg[len++] = 'v';
+            msg[len++] = ',';
+
+            // Add 2-digit device address
+            uint8_t addr = config.address;
+            msg[len++] = '0' + (addr / 10);
+            msg[len++] = '0' + (addr % 10);
+            msg[len++] = ',';
+
+            // Add 3-digit output_val
+            int val = output_val;
+            msg[len++] = '0' + ((val / 100) % 10);
+            msg[len++] = '0' + ((val / 10) % 10);
+            msg[len++] = '0' + (val % 10);
+
+            msg[len++] = '}';
+            msg[len++] = '\r';
+            msg[len++] = '\n';
+
+            HAL_UART_Transmit(&huart2, (uint8_t*)msg, len, 50);
+            break;
+        }
+        case 40: enabled = 0; break;
+        case 41: enabled = 1; break;
+
+
+        default:
+            //HAL_UART_Transmit(&huart2, (uint8_t*)"BAD_CMD\r\n", 9, HAL_MAX_DELAY);
+            break;
+    }
+
+    command_int = 0; // reset command
+}
+
+
+
+
+	      // Calculating the error from desired angle
+	      int16_t error = adc_value - targetAngle;
+
+	      // Speed tracking variable to be set. Scaled up by SCALE_PD to take advantage of integer math on PD loop, that's why it's int32_t
+	      int32_t speed = 0;
+
+	      //Updating error rolling average
+	      int32_t delta = (int32_t)(error - last_error) * 1000;
+	      rolling_delta_error = (rolling_delta_error * (10000 - alpha) + delta * alpha) / 10000;
+
+	      // Only running the control loop if we determined we havne't hit the target
+	      if (target_hit == 0) {
+
+	    	  // If the error is larger than 1000 (~90 degrees) we want to go at full speed
+	    	  if (abs(error) > 1000){
+	    		  // Making sure the dirs are correct, and scaling up the max speed (1000) by the scale factor
+	    		  if (adc_value < targetAngle){
+	    			  speed = -1000 * SCALE_PD;
+	    		  } else  if (adc_value > targetAngle){
+	    			  speed = 1000 * SCALE_PD;
+	    		  }
+	    	  } else {
+
+	    		  // Porportional contribution
+	    		  speed += (error)* config.Kp * SCALE_PD;
+
+	    		  // Derivative portion
+	    		  speed += rolling_delta_error * config.Kd * SCALE_PD / 1000;
+
+	    		  //error_integral += error;
+	    		  //speed += error_integral * Ki;
+	    	  }
+	      }
+
+
+
+	      last_error = error;
+	      speed = speed / SCALE_PD;
+
+	      // Mapping to +/- 400 to 1000 range
+	      if(speed > 0) speed = speed * 5 / 10 + 500;
+	      if(speed < 0) speed = speed * 5 / 10 - 500;
+
+	      // Clamping into +/- 999 range
+	      if(speed < -999){
+	    	  speed = -999;
+	      } else if (speed > 999){
+	    	  speed = 999;
+	      }
+
+	      // Target hit
+	      if (abs(error) < config.errorTol && rolling_delta_error * 10 < config.errorTolChange){
+	    	  target_hit = 1;
+	    	  speed = 0;
+	      }
+
+	      if(!enabled){
+	    	  speed = 0;
+	      }
+
+	      last_error = error;
+
+	      if(speed > 0){
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_SET);
+	      } else if (speed < 0){
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+	      } else {
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+	      }
+
+
+	      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, abs(speed));
+
+
+	          // --- Convert number to string and send ---
+	      // --- Manual UART print without snprintf ---
+	      if(HAL_GetTick() - last_print > 20 && debug){
+	          last_print = HAL_GetTick();
+
+	          int32_t values[4] = { adc_value, targetAngle, speed, rolling_delta_error * 10 };
+
+	          for(int v = 0; v < 4; v++){
+	              int32_t val = values[v];
+	              char buf[12]; // enough for -2147483648
+	              int i = 0;
+	              int is_negative = 0;
+
+	              if(val < 0){
+	                  is_negative = 1;
+	                  val = -val;
+	              }
+
+	              if(val == 0){
+	                  buf[i++] = '0';
+	              }
+
+	              while(val > 0){
+	                  buf[i++] = '0' + (val % 10);
+	                  val /= 10;
+	              }
+
+	              if(is_negative){
+	                  buf[i++] = '-';
+	              }
+
+	              // Send digits in correct order
+	              for(int j = i-1; j >= 0; j--){
+	                  HAL_UART_Transmit(&huart2, (uint8_t*)&buf[j], 1, HAL_MAX_DELAY);
+	              }
+
+	              // Add comma + space if not last value
+	              if(v < 3){
+	                  HAL_UART_Transmit(&huart2, (uint8_t*)", ", 2, HAL_MAX_DELAY);
+	              }
+	          }
+
+	          // Send newline
+	          HAL_UART_Transmit(&huart2, (uint8_t*)"\r\n", 2, HAL_MAX_DELAY);
+	      }
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+
+  __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_0);
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV4;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 79;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_RS485Ex_Init(&huart2, UART_DE_POLARITY_HIGH, 0, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+
+  /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_11, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA8 PA11 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_11;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA12 */
+  GPIO_InitStruct.Pin = GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
+}
+
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
+
+/**
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
+  /* User can add his own implementation to report the HAL error return state */
+  __disable_irq();
+  while (1)
+  {
+  }
+  /* USER CODE END Error_Handler_Debug */
+}
+
+#ifdef  USE_FULL_ASSERT
+/**
+  * @brief  Reports the name of the source file and the source line number
+  *         where the assert_param error has occurred.
+  * @param  file: pointer to the source file name
+  * @param  line: assert_param error line source number
+  * @retval None
+  */
+void assert_failed(uint8_t *file, uint32_t line)
+{
+  /* USER CODE BEGIN 6 */
+  /* User can add his own implementation to report the file name and line number,
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* USER CODE END 6 */
+}
+#endif /* USE_FULL_ASSERT */

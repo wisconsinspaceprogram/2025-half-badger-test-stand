@@ -98,8 +98,8 @@ volatile int16_t target_hit = 1;
 //#define Kp (4 * SCALE_PD)
 //#define Kd (500 * SCALE_PD)
 
-int16_t rolling_delta_error = 0;
-int8_t alpha = 99;
+int32_t rolling_delta_error = 0;
+int8_t alpha = 80;
 //#define Ki (0)
 
 volatile uint8_t enabled = 1; // 1 = enabled, 0 = disabled, no power will be given to the motor
@@ -490,7 +490,16 @@ int main(void)
 	      int32_t speed = 0;
 
 	      //Updating error rolling average
-	      rolling_delta_error = (rolling_delta_error * alpha + (error - last_error) * 1000 * (100 - alpha)) / 100;
+	      //rolling_delta_error = (rolling_delta_error * alpha + (error - last_error) * 1000 * (100 - alpha)) / 100;
+
+	      static uint32_t last_deriv_tick = 0;
+	      uint32_t tick = HAL_GetTick();
+	      if(tick - last_deriv_tick > 5){ // compute derivative every 5 ms
+	          int32_t delta = (int32_t)(error - last_error);
+	          rolling_delta_error = (rolling_delta_error * (100 - alpha) + delta * alpha) / 100;
+	          last_deriv_tick = tick;
+	          last_error = error;
+	      }
 
 	      // Only running the control loop if we determined we havne't hit the target
 	      if (target_hit == 0) {
@@ -518,7 +527,6 @@ int main(void)
 
 
 
-	      last_error = error;
 	      speed = speed / SCALE_PD;
 
 	      // Mapping to +/- 400 to 1000 range
@@ -533,7 +541,7 @@ int main(void)
 	      }
 
 	      // Target hit
-	      if (abs(error) < config.errorTol && rolling_delta_error / 1000 < config.errorTolChange){
+	      if (abs(error) < config.errorTol && rolling_delta_error * 10 < config.errorTolChange){
 	    	  target_hit = 1;
 	    	  speed = 0;
 	      }
@@ -541,8 +549,6 @@ int main(void)
 	      if(!enabled){
 	    	  speed = 0;
 	      }
-
-	      last_error = error;
 
 	      if(speed > 0){
 	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
@@ -564,7 +570,7 @@ int main(void)
 	      if(HAL_GetTick() - last_print > 20 && debug){
 	          last_print = HAL_GetTick();
 
-	          int32_t values[4] = { adc_value, targetAngle, speed, rolling_delta_error / 1000 };
+	          int32_t values[4] = { adc_value, targetAngle, speed, rolling_delta_error * 10 };
 
 	          for(int v = 0; v < 4; v++){
 	              int32_t val = values[v];

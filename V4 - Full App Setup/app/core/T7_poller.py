@@ -16,7 +16,7 @@ tc_K = thermocouples["K"]
 
 SERIAL_NUMBER = 470022092
 
-MAX_BUFFER_SIZE = 1_000_000  # Max number of samples to keep in memory
+MAX_BUFFER_SIZE = 1_000_000  # Max number of samples to keep in memory for plotting
 MAX_FILE_SIZE = 10_000_000  # Max size of log file in bytes
 
 # Variables for the T7

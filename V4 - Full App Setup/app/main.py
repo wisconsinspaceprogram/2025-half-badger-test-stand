@@ -2,12 +2,16 @@ import threading
 import time
 import dearpygui.dearpygui as dpg
 from gui import tabs, visual_updater
-from core import T7_poller, T7_Pro_poller, ECU_Poller, sequence_executer
+from core import T7_poller, T7_Pro_poller, U6_Pro_poller, ECU_Poller, sequence_executer
 
 dpg.create_context()
 
+U6_thread = None
+
 
 def main():
+    global U6_thread
+
     # Getting the gui up and running
     with dpg.window(
         tag="Main Window",
@@ -18,13 +22,15 @@ def main():
         no_move=True,
     ):
         tabs.build_tabs()
-        tabs.load_defaults()    
+        tabs.load_defaults()
 
     dpg.create_viewport(title="Kick-ass control app", width=1800, height=1000)
 
     # Starting the DAQ and ECU pollers to retrive data in the background
     threading.Thread(target=T7_poller.start_polling, daemon=False).start()
     threading.Thread(target=T7_Pro_poller.start_polling, daemon=False).start()
+    U6_thread = threading.Thread(target=U6_Pro_poller.start_polling, daemon=False)
+    U6_thread.start()
     threading.Thread(target=ECU_Poller.start_ecu_communication, daemon=False).start()
     threading.Thread(target=sequence_executer.start_sequence_runner, daemon=False).start()
 
@@ -40,4 +46,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        U6_Pro_poller.stop_flag.set()

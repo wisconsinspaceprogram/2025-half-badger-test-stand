@@ -21,6 +21,12 @@ ecu_valve_actual_states = [0] * 24
 ecu_battery_voltage = 0.0
 ecu_pyro_states = [0] * 2
 
+
+
+ecu_rs485_valve_percentages = [0] * 12 # creates list 
+
+
+
 ecu_valve_locations = ["Not Connected"] * 24
 
 tx_file_lock = threading.Lock()
@@ -222,6 +228,21 @@ def process_command(command: str):
                 ecu_valve_actual_states[i_state] = int(info[i_state])
 
 
+
+
+    if command.startswith("{4,") and command.endswith("}"):
+        info = command[3:-1].split(",") #splits the 12 values 
+        for i in range(12):
+            try:
+                ecu_rs485_valve_percentages[i] = int(info[i]) #stores parsed values 
+            except:
+                ecu_rs485_valve_percentages[i] = 0
+
+
+
+
+
+
 def send_command(command: str):
     global ecu_connected
     global ecu_command_sent_list
@@ -290,3 +311,8 @@ def get_battery_voltage():
 
 def get_pyro_channel_states():
     return ecu_pyro_states
+
+
+
+def get_rs485_valve_percentages():
+    return ecu_rs485_valve_percentages

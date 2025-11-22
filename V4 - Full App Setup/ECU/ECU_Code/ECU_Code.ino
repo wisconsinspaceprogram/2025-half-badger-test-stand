@@ -321,6 +321,7 @@ void loop() {
     Serial.print("{3,");
     Serial.print(batteryVoltage);
     Serial.println("}");
+    printRS485ValvePercentages();
 
     lastValveStatePrint = t;
   }
@@ -461,6 +462,8 @@ void printActualValveStates() {
     Serial.print(!digitalRead(limitSwitchPins[i]));
   }
 
+
+  /* 
   for (int i = 0; i < 12; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i];
@@ -471,8 +474,24 @@ void printActualValveStates() {
     }
   }
 
+Serial.println("}");
+*/
+}
+
+
+void printRS485ValvePercentages() {
+  Serial.print("{4");
+  for (int i = 0; i < 12; i++) {
+    Serial.print(",");
+    uint8_t angle = rs485ValveAngles[i]; //raw angle received
+    int percent = angle - 50;   // convert raw angle to percent 
+    Serial.print(percent);      //Removed constrain to see if any weird values occur
+  }
+
   Serial.println("}");
 }
+
+
 
 int extractInt(const char str[], int i) {
   if (str[i] == '\0') return -9999;  // Ensure index is within bounds

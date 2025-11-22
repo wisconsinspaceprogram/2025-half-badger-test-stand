@@ -315,6 +315,15 @@ def update_thread():
                 valve_locations = ECU_Poller.get_valve_locations()
                 pyro_states = ECU_Poller.get_pyro_channel_states()
 
+
+                rs485_percentages = ECU_Poller.get_rs485_valve_percentages() #gets values from ECU_Poller
+                for i in range(12):
+                    tag = f"rs485_valve_{i+12}" #gives each value a unique tag 
+                    if dpg.does_item_exist(tag): 
+                        dpg.set_value(tag, f"{rs485_percentages[i]}%") # sets the value of each tag to the corresponding percentage value
+
+                
+
                 valve_tags = main_tab.get_pnid_valve_tags()
 
                 for i in range(0, 24):

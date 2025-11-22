@@ -463,7 +463,7 @@ void printActualValveStates() {
   }
 
 
-  /* 
+  
   for (int i = 0; i < 12; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i];
@@ -475,7 +475,7 @@ void printActualValveStates() {
   }
 
 Serial.println("}");
-*/
+
 }
 
 

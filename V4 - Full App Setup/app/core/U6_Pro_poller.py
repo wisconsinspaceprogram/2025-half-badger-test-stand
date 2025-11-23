@@ -21,28 +21,20 @@ daq_channel_numbers = [1, 2]
 daq_sensor_types = ["Pressure Transducer", "Thermocouple Type K"]
 daq_sensor_locations = ["Combustion Chamber", "IPA Tank Top"]
 daq_mappings = [((0, 10), (0, 100)), ((0, 10), (0, 1000))]
-scan_rate = 20  # Hz
-
-cur_stream_daq_sensor_types = daq_sensor_types
-cur_stream_daq_sensor_numbers = daq_channel_numbers
-cur_stream_daq_sensor_locations = daq_sensor_locations
-cur_stream_daq_mappings = daq_mappings
-cur_stream_scan_rate = scan_rate
+scan_rate = 20  # Hz, used only for timing
 
 U6_connected = False
 U6 = None
 
 unixStartTime = time.time()
-
 processed_buffer = []
 lastDataTime = time.time()
-
 file_lock = threading.Lock()
 save_file_name = ""
-
 stop_flag = threading.Event()
 
-# -------------------- UNCHANGED: UTILITY FUNCTIONS -------------------------
+
+# -------------------- UTILITY FUNCTIONS -------------------------
 
 
 def get_unit_from_type(type: str):
@@ -75,9 +67,12 @@ def get_active_channels():
     return daq_channel_numbers
 
 
+def get_sensor_locations():
+    return daq_sensor_locations
+
+
 def update_log_name():
     global save_file_name
-
     this_file_dir = Path(__file__).parent
     t = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     save_file_name = this_file_dir.parent / "logs" / f"{t}_DAQ_U6.csv"
@@ -102,250 +97,122 @@ def write_headers():
 
 
 def update_config(active_channel_numbers, active_sensor_types, mapping_data, active_sensor_locations, newScanRate):
-
-    global daq_channel_numbers
-    global daq_sensor_types
-    global daq_sensor_locations
-    global daq_mappings
-    global processed_buffer
-    global scan_rate
-
-    processed_buffer = []  # clear buffer
-
+    global daq_channel_numbers, daq_sensor_types, daq_sensor_locations, daq_mappings, processed_buffer, scan_rate
+    processed_buffer = []
     daq_channel_numbers = active_channel_numbers
     daq_sensor_types = active_sensor_types
     daq_sensor_locations = active_sensor_locations
     daq_mappings = mapping_data
     scan_rate = newScanRate
-
     update_log_name()
     write_headers()
 
 
-# -------------------- U6 SETUP + STREAM CONFIG -------------------------
+# -------------------- U6 SETUP -------------------------
 
 
 def connect_U6():
     global U6, U6_connected
-
     try:
         if U6 is not None:
             U6.close()
     except:
         pass
-
     U6 = u6.U6(autoOpen=False)
     U6.open()
     time.sleep(0.1)
+    U6_connected = True
 
 
-def configure_U6():
-    global cur_stream_daq_sensor_types
-    global cur_stream_daq_sensor_numbers
-    global cur_stream_daq_sensor_locations
-    global cur_stream_daq_mappings
-    global cur_stream_scan_rate
-    global U6
-
-    # U6 uses 0-based AIN indexes
-    ain_channels = [n - 1 for n in daq_channel_numbers]
-
-    # Build ChannelOptions list per channel
-    channel_options = []
-    for sensor in daq_sensor_types:
-        if sensor.startswith("Thermocouple"):
-            # High-gain range for TC amplifier output (±100 mV)
-            channel_options.append(2)  # Gain index 2 = 0.1V range
-        else:
-            # Default ±10V
-            channel_options.append(0)
-
-    # --- Stream config ---
-    # U6 forces *global* settings for ResolutionIndex + SettlingFactor.
-    # Your single-ended config matches ChannelOptions=GAIN.
-    U6.streamConfig(
-        NumChannels=len(ain_channels),
-        ChannelNumbers=ain_channels,
-        ChannelOptions=channel_options,
-        SettlingFactor=0,
-        ResolutionIndex=0,
-        ScanFrequency=scan_rate,
-    )
-
-    U6.streamStart()
-
-    # Save snapshot
-    cur_stream_daq_sensor_types = daq_sensor_types
-    cur_stream_daq_sensor_numbers = daq_channel_numbers
-    cur_stream_daq_sensor_locations = daq_sensor_locations
-    cur_stream_daq_mappings = daq_mappings
-    cur_stream_scan_rate = scan_rate
+# -------------------- POLLING (NO STREAM MODE) -------------------------
 
 
-# Retrive the locations of all the sensors
-def get_sensor_locations():
-    return daq_sensor_locations
-
-
-def start_polling():
-    global U6_connected
-    global processed_buffer
-
-    global cur_stream_daq_sensor_types
-    global cur_stream_daq_sensor_numbers
-    global cur_stream_daq_sensor_locations
-    global cur_stream_daq_mappings
-    global cur_stream_scan_rate
-
-    main_thread = threading.main_thread()
-
+def read_ain(channel_index):
+    """
+    Read a single analog input with max resolution (ResolutionIndex=8)
+    SettlingFactor=2
+    """
     try:
-        while not stop_flag.is_set():
+        return U6.getAIN(positiveChannel=channel_index, resolutionIndex=10, settlingFactor=2)
+    except Exception as e:
+        print(f"Error reading AIN{channel_index}: {e}")
+        return 0
 
-            if not U6_connected:
-                try:
-                    connect_U6()
-                    configure_U6()
-                    U6_connected = True
-                except Exception as e:
-                    print("U6 Poller, connection issue:", e)
-                    time.sleep(0.5)
 
-            else:  # already connected
-                try:
-                    # Detect config changes (same logic as T7 version)
-                    if (
-                        cur_stream_daq_sensor_types != daq_sensor_types
-                        or cur_stream_daq_sensor_numbers != daq_channel_numbers
-                        or cur_stream_daq_sensor_locations != daq_sensor_locations
-                        or cur_stream_daq_mappings != daq_mappings
-                        or cur_stream_scan_rate != scan_rate
-                    ):
+def poll_sensors():
+    """
+    Poll all channels manually without streaming
+    """
+    global processed_buffer, lastDataTime
 
-                        U6_connected = False
-                        processed_buffer = []
-                        continue
-
-                    # Read stream packet
-                    for result in U6.streamData():
-                        if "errors" in result and result["errors"] != 0:
-                            print("U6 stream error:", result["errors"])
-                            continue
-
-                        if "missed" in result and result["missed"] != 0:
-                            print("Missed:", result["missed"])
-
-                        # unpacked dict format
-                        data_per_channel = [result[f"AIN{n-1}"] for n in daq_channel_numbers]
-
-                        # data_per_channel is [
-                        #   [samples...], [samples...], ...
-                        # ]
-
-                        if stop_flag.is_set():
-                            print("u6 Pro poller stopping, closing U6 connection...")
-                            U6.streamStop()
-                            U6.close()
-                            print("U6 connection closed.")
-                            break
-
-                        process_data(data_per_channel)
-
-                except Exception as e:
-                    print("U6 Poller Error:", e)
-                    time.sleep(0.2)
-                    U6_connected = False
-
-    finally:
+    while not stop_flag.is_set():
+        got_data_time = time.time()
+        cjc_temp_K = 0
         try:
-            print("u6 Pro poller stopping, closing U6 connection...")
-            U6.streamStop()
-            U6.close()
-            print("U6 connection closed.")
+            cjc_temp_K = U6.getTemperature()
         except:
             pass
-
-
-# -------------------- DATA PROCESSING (UNCHANGED LOGIC) -------------------------
-
-
-def process_data(read_data):
-    global lastDataTime
-    global processed_buffer
-
-    num_samples = len(read_data[0])
-
-    # NEW: U6 CJ temperature (Kelvin)
-    try:
-        cjc_temp_K = U6.getTemperature()
         cold_junction = cjc_temp_K - 273.15
-    except:
-        cold_junction = 25.0  # fallback
 
-    got_data_time = time.time()
+        read_data = []
+        for ch in daq_channel_numbers:
+            raw = read_ain(ch - 1)
+            read_data.append([raw])  # wrap in list for compatibility
 
-    processed_samples = [[[0] * len(read_data), 0] for _ in range(num_samples)]
-
-    for i_sensor in range(len(read_data)):
-        for i_sample in range(num_samples):
+        # Process data exactly like old stream code
+        processed_samples = [[[0] * len(read_data), 0] for _ in range(1)]  # only 1 sample
+        for i_sensor in range(len(read_data)):
             try:
                 sensor_type = daq_sensor_types[i_sensor]
-
+                raw = read_data[i_sensor][0]
                 if sensor_type == "Thermocouple Type T":
-                    mv = read_data[i_sensor][i_sample] * 1000.0
+                    mv = raw * 1000.0
                     mv += utils.c_to_mv_type_t(cold_junction)
-                    processed_samples[i_sample][0][i_sensor] = utils.mv_to_c_type_t(mv)
-
+                    processed_samples[0][0][i_sensor] = utils.mv_to_c_type_t(mv)
                 elif sensor_type == "Thermocouple Type K":
-                    mv = read_data[i_sensor][i_sample] * 1000.0
+                    mv = raw * 1000.0
                     mv += utils.c_to_mv_type_k(cold_junction)
-                    processed_samples[i_sample][0][i_sensor] = utils.mv_to_c_type_k(mv)
-
+                    processed_samples[0][0][i_sensor] = utils.mv_to_c_type_k(mv)
                 elif sensor_type in ["Pressure Transducer", "Load Cell"]:
                     slope = (daq_mappings[i_sensor][1][1] - daq_mappings[i_sensor][1][0]) / (
                         daq_mappings[i_sensor][0][1] - daq_mappings[i_sensor][0][0]
                     )
                     yint = (slope * daq_mappings[i_sensor][0][0]) - daq_mappings[i_sensor][1][0]
-                    processed_samples[i_sample][0][i_sensor] = read_data[i_sensor][i_sample] * slope - yint
-
+                    processed_samples[0][0][i_sensor] = raw * slope - yint
                 else:
-                    processed_samples[i_sample][0][i_sensor] = read_data[i_sensor][i_sample]
-
+                    processed_samples[0][0][i_sensor] = raw
             except:
-                processed_samples[i_sample][0][i_sensor] = 0
+                processed_samples[0][0][i_sensor] = 0
 
-    # Timestamp reconstruction
-    deltaTime = got_data_time - lastDataTime
-    for i_sample in range(num_samples):
-        processed_samples[i_sample][1] = (got_data_time - unixStartTime) - ((num_samples - 1 - i_sample) * deltaTime / max(num_samples, 1))
+        processed_samples[0][1] = got_data_time - unixStartTime
+        lastDataTime = got_data_time
 
-    lastDataTime = time.time()
+        processed_buffer.append(processed_samples[0])
+        if len(processed_buffer) > MAX_BUFFER_SIZE:
+            processed_buffer = processed_buffer[-MAX_BUFFER_SIZE:]
 
-    # Append to buffer
-    for sample in processed_samples:
-        processed_buffer.append(sample)
+        # Write to file
+        with file_lock:
+            with open(save_file_name, "a") as f:
+                out = f"{processed_samples[0][1]},"
+                out += ",".join(str(val) for val in processed_samples[0][0])
+                out += "\n"
+                f.write(out)
 
-    if len(processed_buffer) > MAX_BUFFER_SIZE:
-        processed_buffer = processed_buffer[-MAX_BUFFER_SIZE:]
+        # Rotate file if too big
+        size_bytes = os.path.getsize(save_file_name)
+        if size_bytes > MAX_FILE_SIZE:
+            update_log_name()
+            write_headers()
 
-    # Write to file
-    with file_lock:
-        with open(save_file_name, "a") as f:
-            out = ""
-            for s in processed_samples:
-                out += f"{s[1]},"
-                for val in s[0]:
-                    out += f"{val},"
-                out = out[:-1] + "\n"
-            f.write(out)
+        time.sleep(1 / scan_rate)  # wait for next poll
 
-    # Rotate file if large
-    size_bytes = os.path.getsize(save_file_name)
-    print(size_bytes, "bytes")
 
-    if size_bytes > MAX_FILE_SIZE:
-        update_log_name()
-        write_headers()
+def start_polling():
+    if not U6_connected:
+        connect_U6()
+    polling_thread = threading.Thread(target=poll_sensors, daemon=True)
+    polling_thread.start()
 
 
 # -------------------- PUBLIC DATA ACCESS -------------------------
@@ -353,19 +220,15 @@ def process_data(read_data):
 
 def get_data(seconds: float, channel: int):
     x_data, y_data = [], []
-
     if len(processed_buffer) > 0 and channel in daq_channel_numbers:
         cur_time = processed_buffer[-1][1]
-
         idx = daq_channel_numbers.index(channel)
-
         for sample in reversed(processed_buffer):
             if sample[1] > cur_time - seconds:
                 x_data.append(sample[1])
                 y_data.append(sample[0][idx])
             else:
                 break
-
     return x_data, y_data
 
 

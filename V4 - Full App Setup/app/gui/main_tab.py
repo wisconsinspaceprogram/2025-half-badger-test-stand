@@ -70,7 +70,7 @@ def make_data_stack(location: str, start: tuple, offset: tuple, count: int, up: 
 
 def make_pnid_valve_icons(location: str, start: tuple, offset: tuple):
     global pnid_valve_tags
-    
+
     tag = f"PNID_{location.lower()}_valve"
     with dpg.group(pos=(offset[0] + start[0], offset[1] + start[1])):
         with dpg.drawlist(25, 25):
@@ -112,8 +112,8 @@ def build():
                 dpg.add_table_column(label="Open", init_width_or_weight=0.2)
                 dpg.add_table_column(label="Close", init_width_or_weight=0.2)
                 dpg.add_table_column(label="Status", init_width_or_weight=0.3)
-                dpg.add_table_column(label="Percent", init_width_or_weight=0.3) 
-                
+                dpg.add_table_column(label="Percent", init_width_or_weight=0.3)
+
                 for i in range(0, 24):
                     with dpg.table_row():
                         dpg.add_text(str(i))
@@ -135,17 +135,12 @@ def build():
                                 fill=(255, 0, 0, 150),
                                 tag=f"valve_actual_icon_{i}",
                             )
-                        dpg.add_text("0%", tag=f"rs485_valve_{i}")    
-                            
-                            
+                        dpg.add_text("0%", tag=f"rs485_valve_{i}")
 
-#        with dpg.group(pos=(300, 300)):  
-#            dpg.add_text("RS485 Valve Percentages:", color=(255, 255, 255, 255))
-#            for i in range(12):
-#                dpg.add_text(f"RS485 Valve {i}: 0%", tag=f"rs485_valve_{i}", color=(255, 255, 255, 255))
-
-        
-                                   
+        #        with dpg.group(pos=(300, 300)):
+        #            dpg.add_text("RS485 Valve Percentages:", color=(255, 255, 255, 255))
+        #            for i in range(12):
+        #                dpg.add_text(f"RS485 Valve {i}: 0%", tag=f"rs485_valve_{i}", color=(255, 255, 255, 255))
 
         def set_lookback_value(sender, app_data, user_data):
             dpg.set_value("main_tab_seconds_lookback", user_data)

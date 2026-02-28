@@ -106,7 +106,9 @@ volatile uint8_t enabled = 1; // 1 = enabled, 0 = disabled, no power will be giv
 
 volatile uint8_t debug = 0; // 0 = normal, 1 = debug mode
 
-
+uint32_t last_move_command = 0;
+uint32_t ramp_up_time = 100;
+uint16_t init_speed = 400;
 
 /* USER CODE END PV */
 
@@ -393,8 +395,8 @@ int main(void)
     }
 
     switch(command_int){
-        case 1: targetAngle = config.angleOpen; target_hit = 0; break;
-        case 2: targetAngle = config.angleClose; target_hit = 0; break;
+        case 1: targetAngle = config.angleOpen; target_hit = 0; last_move_command = HAL_GetTick(); break;
+        case 2: targetAngle = config.angleClose; target_hit = 0; last_move_command = HAL_GetTick(); break;
         case 21: update_config_if_changed(&config.angleOpen, command_value); break;
         case 22: update_config_if_changed(&config.angleClose, command_value); break;
         case 23: update_config_if_changed(&config.Kp, command_value); break;
@@ -561,16 +563,36 @@ int main(void)
 	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
 	      }
 
+	      uint16_t pwm_out = abs(speed);
 
-	      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, abs(speed));
+	      uint32_t dt = tick - last_move_command;
 
+	      // Ramp only applies shortly after a move command
+	      if (dt < ramp_up_time) {
+
+	          // Linear ramp: init_speed -> pwm_out
+	          if (pwm_out > init_speed) {
+	              pwm_out = init_speed +
+	                        ((pwm_out - init_speed) * dt) / ramp_up_time;
+	          }
+	      }
+
+
+	      __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, abs(pwm_out));
+
+
+//	      if(abs(rolling_delta_error) < 1 && abs(speed) > 500){
+//	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+//	    	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
+//	    	  HAL_Delay(1);
+//	      }
 
 	          // --- Convert number to string and send ---
 	      // --- Manual UART print without snprintf ---
 	      if(HAL_GetTick() - last_print > 20 && debug){
 	          last_print = HAL_GetTick();
 
-	          int32_t values[4] = { adc_value, targetAngle, speed, rolling_delta_error * 10 };
+	          int32_t values[4] = { adc_value, targetAngle, pwm_out, rolling_delta_error * 10 };
 
 	          for(int v = 0; v < 4; v++){
 	              int32_t val = values[v];

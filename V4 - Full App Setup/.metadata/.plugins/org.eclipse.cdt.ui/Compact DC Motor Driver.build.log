@@ -1,10 +1,37 @@
-13:27:14 **** Incremental Build of configuration Debug for project Compact DC Motor Driver ****
+11:12:36 **** Incremental Build of configuration Debug for project Compact DC Motor Driver ****
 make -j8 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -DNDEBUG -DUSE_HAL_DRIVER -DSTM32C011xx -DDEBUG -c -I../Core/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32C0xx/Include -I../Drivers/CMSIS/Include -Os -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'load_persistent_data':
+../Core/Src/main.c:255:9: warning: implicit declaration of function 'memcpy' [-Wimplicit-function-declaration]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:26:1: note: include '<string.h>' or provide a declaration of 'memcpy'
+   25 | #include <stdlib.h>
+  +++ |+#include <string.h>
+   26 | /* USER CODE END Includes */
+../Core/Src/main.c:255:9: warning: incompatible implicit declaration of built-in function 'memcpy' [-Wbuiltin-declaration-mismatch]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:255:9: note: include '<string.h>' or provide a declaration of 'memcpy'
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:381:38: warning: passing argument 1 of 'validate_command' discards 'volatile' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  381 |     uint8_t valid = validate_command(command_buffer, command_int);
+      |                                      ^~~~~~~~~~~~~~
+../Core/Src/main.c:291:35: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'volatile uint8_t *' {aka 'volatile unsigned char *'}
+  291 | uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+      |                          ~~~~~~~~~^~~
+arm-none-eabi-gcc -o "Compact DC Motor Driver.elf" @"objects.list"   -mcpu=cortex-m0plus -T"C:\Users\johnn\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\valve_drivers\Compact DC Motor Driver\STM32C011F4UX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.19.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: Compact DC Motor Driver.elf has a LOAD segment with RWX permissions
+Finished building target: Compact DC Motor Driver.elf
+ 
 arm-none-eabi-size  Compact\ DC\ Motor\ Driver.elf 
+arm-none-eabi-objdump -h -S Compact\ DC\ Motor\ Driver.elf  > "Compact DC Motor Driver.list"
    text	   data	    bss	    dec	    hex	filename
-  12588	      0	   1864	  14452	   3874	Compact DC Motor Driver.elf
+  12652	      0	   1872	  14524	   38bc	Compact DC Motor Driver.elf
 Finished building: default.size.stdout
  
+Finished building: Compact DC Motor Driver.list
+ 
 
-13:27:14 Build Finished. 0 errors, 0 warnings. (took 257ms)
+11:12:38 Build Finished. 0 errors, 4 warnings. (took 2s.8ms)
 

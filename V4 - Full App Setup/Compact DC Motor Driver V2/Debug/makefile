@@ -60,8 +60,8 @@ all: main-build
 main-build: Compact\ DC\ Motor\ Driver\ V2.elf secondary-outputs
 
 # Tool invocations
-Compact\ DC\ Motor\ Driver\ V2.elf Compact\ DC\ Motor\ Driver\ V2.map: $(OBJS) $(USER_OBJS) C:\Users\johnn\OneDrive\Documents\College\AIAA\Half\ Badger\Test\ Stand\ Code\2025-half-badger-test-stand\V4\ -\ Full\ App\ Setup\Compact\ DC\ Motor\ Driver\ V2\STM32C011F6PX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0plus -T"C:\Users\johnn\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Compact\ DC\ Motor\ Driver\ V2.elf Compact\ DC\ Motor\ Driver\ V2.map: $(OBJS) $(USER_OBJS) C:\Users\John\OneDrive\Documents\College\AIAA\Half\ Badger\Test\ Stand\ Code\2025-half-badger-test-stand\V4\ -\ Full\ App\ Setup\Compact\ DC\ Motor\ Driver\ V2\STM32C011F6PX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m0plus -T"C:\Users\John\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

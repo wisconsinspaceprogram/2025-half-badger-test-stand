@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -296,7 +297,7 @@ uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
     if(!IS_DIGIT(buf[1]) || !IS_DIGIT(buf[2])) return 0;
 
     uint8_t addr = parse_two_digit_decimal(buf[1], buf[2]);
-    if(addr != config.address) return 0; // Not for this device
+    if(addr != config.address && addr != 98) return 0; // Not for this device
 
     // For commands 21-28, ensure 4-digit value exists
     if(command_int >= 21 && command_int <= 28) {

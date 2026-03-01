@@ -911,3 +911,136 @@ Finished building: default.size.stdout
  
 Finished building: Compact DC Motor Driver.list
  
+19:33:12 **** Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list"   -mcpu=cortex-m0plus -T"C:\Users\John\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: Compact DC Motor Driver V2.elf has a LOAD segment with RWX permissions
+Finished building target: Compact DC Motor Driver V2.elf
+ 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+arm-none-eabi-objdump -h -S Compact\ DC\ Motor\ Driver\ V2.elf  > "Compact DC Motor Driver V2.list"
+   text	   data	    bss	    dec	    hex	filename
+  11516	      0	   1872	  13388	   344c	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+Finished building: Compact DC Motor Driver V2.list
+ 
+19:34:24 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+   text	   data	    bss	    dec	    hex	filename
+  11516	      0	   1872	  13388	   344c	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+19:34:30 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32C011xx -c -I../Core/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32C0xx/Include -I../Drivers/CMSIS/Include -Os -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'load_persistent_data':
+../Core/Src/main.c:255:9: warning: implicit declaration of function 'memcpy' [-Wimplicit-function-declaration]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:26:1: note: include '<string.h>' or provide a declaration of 'memcpy'
+   25 | #include <stdlib.h>
+  +++ |+#include <string.h>
+   26 | /* USER CODE END Includes */
+../Core/Src/main.c:255:9: warning: incompatible implicit declaration of built-in function 'memcpy' [-Wbuiltin-declaration-mismatch]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:255:9: note: include '<string.h>' or provide a declaration of 'memcpy'
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:381:38: warning: passing argument 1 of 'validate_command' discards 'volatile' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  381 |     uint8_t valid = validate_command(command_buffer, command_int);
+      |                                      ^~~~~~~~~~~~~~
+../Core/Src/main.c:291:35: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'volatile uint8_t *' {aka 'volatile unsigned char *'}
+  291 | uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+      |                          ~~~~~~~~~^~~
+../Core/Src/main.c:390:5: error: expected ',' or ';' before 'if'
+  390 |     if(command_int >= 21 && command_int <= 28){
+      |     ^~
+make: *** [Core/Src/subdir.mk:34: Core/Src/main.o] Error 1
+"make -j12 all" terminated with exit code 2. Build might be incomplete.
+19:34:34 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32C011xx -c -I../Core/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32C0xx/Include -I../Drivers/CMSIS/Include -Os -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'load_persistent_data':
+../Core/Src/main.c:255:9: warning: implicit declaration of function 'memcpy' [-Wimplicit-function-declaration]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:26:1: note: include '<string.h>' or provide a declaration of 'memcpy'
+   25 | #include <stdlib.h>
+  +++ |+#include <string.h>
+   26 | /* USER CODE END Includes */
+../Core/Src/main.c:255:9: warning: incompatible implicit declaration of built-in function 'memcpy' [-Wbuiltin-declaration-mismatch]
+  255 |         memcpy(&config, flash_data, sizeof(PersistentConfig));
+      |         ^~~~~~
+../Core/Src/main.c:255:9: note: include '<string.h>' or provide a declaration of 'memcpy'
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:381:38: warning: passing argument 1 of 'validate_command' discards 'volatile' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  381 |     uint8_t valid = validate_command(command_buffer, command_int);
+      |                                      ^~~~~~~~~~~~~~
+../Core/Src/main.c:291:35: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'volatile uint8_t *' {aka 'volatile unsigned char *'}
+  291 | uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+      |                          ~~~~~~~~~^~~
+arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list"   -mcpu=cortex-m0plus -T"C:\Users\John\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: Compact DC Motor Driver V2.elf has a LOAD segment with RWX permissions
+Finished building target: Compact DC Motor Driver V2.elf
+ 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+arm-none-eabi-objdump -h -S Compact\ DC\ Motor\ Driver\ V2.elf  > "Compact DC Motor Driver V2.list"
+   text	   data	    bss	    dec	    hex	filename
+  11516	      0	   1872	  13388	   344c	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+Finished building: Compact DC Motor Driver V2.list
+ 
+19:55:13 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+   text	   data	    bss	    dec	    hex	filename
+  11516	      0	   1872	  13388	   344c	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+10:26:41 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32C011xx -c -I../Core/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32C0xx/Include -I../Drivers/CMSIS/Include -Os -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:382:38: warning: passing argument 1 of 'validate_command' discards 'volatile' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  382 |     uint8_t valid = validate_command(command_buffer, command_int);
+      |                                      ^~~~~~~~~~~~~~
+../Core/Src/main.c:292:35: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'volatile uint8_t *' {aka 'volatile unsigned char *'}
+  292 | uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+      |                          ~~~~~~~~~^~~
+arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list"   -mcpu=cortex-m0plus -T"C:\Users\John\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: Compact DC Motor Driver V2.elf has a LOAD segment with RWX permissions
+Finished building target: Compact DC Motor Driver V2.elf
+ 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+arm-none-eabi-objdump -h -S Compact\ DC\ Motor\ Driver\ V2.elf  > "Compact DC Motor Driver V2.list"
+   text	   data	    bss	    dec	    hex	filename
+  11516	      0	   1872	  13388	   344c	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+Finished building: Compact DC Motor Driver V2.list
+ 
+10:30:04 **** Incremental Build of configuration Debug for project Compact DC Motor Driver V2 ****
+make -j12 all 
+arm-none-eabi-gcc "../Core/Src/main.c" -mcpu=cortex-m0plus -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32C011xx -c -I../Core/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc -I../Drivers/STM32C0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32C0xx/Include -I../Drivers/CMSIS/Include -Os -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/main.d" -MT"Core/Src/main.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/main.o"
+../Core/Src/main.c: In function 'main':
+../Core/Src/main.c:382:38: warning: passing argument 1 of 'validate_command' discards 'volatile' qualifier from pointer target type [-Wdiscarded-qualifiers]
+  382 |     uint8_t valid = validate_command(command_buffer, command_int);
+      |                                      ^~~~~~~~~~~~~~
+../Core/Src/main.c:292:35: note: expected 'uint8_t *' {aka 'unsigned char *'} but argument is of type 'volatile uint8_t *' {aka 'volatile unsigned char *'}
+  292 | uint8_t validate_command(uint8_t *buf, uint8_t command_int) {
+      |                          ~~~~~~~~~^~~
+arm-none-eabi-gcc -o "Compact DC Motor Driver V2.elf" @"objects.list"   -mcpu=cortex-m0plus -T"C:\Users\John\OneDrive\Documents\College\AIAA\Half Badger\Test Stand Code\2025-half-badger-test-stand\V4 - Full App Setup\Compact DC Motor Driver V2\STM32C011F6PX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Compact DC Motor Driver V2.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+C:/ST/STM32CubeIDE_1.18.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344/tools/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: warning: Compact DC Motor Driver V2.elf has a LOAD segment with RWX permissions
+Finished building target: Compact DC Motor Driver V2.elf
+ 
+arm-none-eabi-size  Compact\ DC\ Motor\ Driver\ V2.elf 
+arm-none-eabi-objdump -h -S Compact\ DC\ Motor\ Driver\ V2.elf  > "Compact DC Motor Driver V2.list"
+   text	   data	    bss	    dec	    hex	filename
+  11524	      0	   1872	  13396	   3454	Compact DC Motor Driver V2.elf
+Finished building: default.size.stdout
+ 
+Finished building: Compact DC Motor Driver V2.list
+ 

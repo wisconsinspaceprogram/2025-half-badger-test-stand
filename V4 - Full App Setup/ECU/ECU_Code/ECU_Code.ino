@@ -26,9 +26,9 @@ uint8_t limitSwitchPins[12] = {
 };
 
 // RS485 valves  
-uint8_t rs485ValveAddresses[12] = { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
-uint8_t rs485ValveAngles[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-uint8_t rs485ValveDesiredStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t rs485ValveAddresses[24] = { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 };
+uint8_t rs485ValveAngles[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t rs485ValveDesiredStates[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 float lastValveStatePrint = 0.0;
 
@@ -348,7 +348,7 @@ void updateRS485ValveAngles() {
   char buf[40];
   char cmd[16];
 
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     int addr = rs485ValveAddresses[i];
     sprintf(cmd, "{%02d,32}", addr);
 
@@ -447,7 +447,7 @@ void printDesiredValveStates() {
     Serial.print(valveStates[i]);
   }
 
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     Serial.print(rs485ValveDesiredStates[i]);
   }
@@ -464,7 +464,7 @@ void printActualValveStates() {
 
 
   
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i];
     if (angle > 30 && angle < 80) {
@@ -481,7 +481,7 @@ Serial.println("}");
 
 void printRS485ValvePercentages() {
   Serial.print("{4");
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i]; //raw angle received
     int percent = angle - 50;   // convert raw angle to percent 

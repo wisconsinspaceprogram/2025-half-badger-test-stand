@@ -96,11 +96,12 @@ Wait,,,,0.5
 Poll,,,,0.0
 Wait,,,,0.5
 Open,IPA Main,,,0.0
+Wait,,,,0.25
 Open,LOX Main,,,0.0
 Close,LOX Purge,,,0.0
-Wait,,,,1.0
+Wait,,,,0.5
 Poll,,,,0.0
-Wait,,,,1.5
+Wait,,,,1.0
 Close,LOX Main,,,0.0
 Open,LOX Purge,,,0.0
 Wait,,,,0.5
@@ -121,11 +122,8 @@ Wait,,,,4.0
 Open,IPA Tank Vent,,,0.0
 Open,LOX Tank Vent,,,0.0
 ###
-Purge
-Open,LOX Purge,,,0.0
-Open,IPA Purge,,,0.0
-Wait,,,,1.0
-Poll,,,,0.0
-Wait,,,,9.0
-Close,LOX Purge,,,0.0
-Close,IPA Purge,,,0.0
+IPA Main 2s
+Wait,,,,0.5
+Open,IPA Main,,,0.0
+Wait,,,,2.0
+Close,IPA Main,,,0.0

@@ -114,7 +114,7 @@ def build():
                 dpg.add_table_column(label="Status", init_width_or_weight=0.3)
                 dpg.add_table_column(label="Percent", init_width_or_weight=0.3)
 
-                for i in range(0, 24):
+                for i in range(0, 36):
                     with dpg.table_row():
                         dpg.add_text(str(i))
                         dpg.add_text("Valve " + str(i), tag="valve_loc_" + str(i))
@@ -183,7 +183,7 @@ def build():
             dpg.add_plot_axis(dpg.mvYAxis, label="Temperature (C)", tag="y_axis_c", auto_fit=True)
             dpg.add_plot_axis(dpg.mvYAxis2, label="Voltage (V)", tag="y_axis_v", auto_fit=True, opposite=True)
 
-        with dpg.group(pos=(25, 700)):
+        with dpg.group(pos=(900, 725)):
             with dpg.table(
                 header_row=True,
                 row_background=True,
@@ -210,24 +210,24 @@ def build():
                                 tag=f"pyro_status_icon_{i}",
                             )
 
-        dpg.add_checkbox(label="Arm Pyro Channels", pos=(25, 675), callback=arm_pyro_channels)
+        dpg.add_checkbox(label="Arm Pyro Channels", pos=(900, 700), callback=arm_pyro_channels)
         arm_pyro_channels(None, False, None)
 
         with dpg.group():
-            dpg.add_text(default_value="ECU Output:", pos=(375, 675))
+            dpg.add_text(default_value="ECU Output:", pos=(400, 675))
             dpg.add_input_text(
                 default_value="{command} \n command",
-                pos=(375, 695),
+                pos=(400, 695),
                 readonly=True,
                 multiline=True,
                 width=450,
                 height=100,
                 tag="main_tab_ecu_recieved_commands",
             )
-            dpg.add_text(default_value="Send Command to ECU:", pos=(375, 810))
+            dpg.add_text(default_value="Send Command to ECU:", pos=(400, 810))
             dpg.add_input_text(
                 default_value="",
-                pos=(375, 830),
+                pos=(400, 830),
                 readonly=False,
                 width=275,
                 height=20,
@@ -236,7 +236,7 @@ def build():
             )
             dpg.add_button(
                 label="Send",
-                pos=(660, 830),
+                pos=(685, 830),
                 width=65,
                 height=20,
                 callback=callback_send_command,
@@ -245,7 +245,7 @@ def build():
 
             dpg.add_input_text(
                 default_value="Sent Command...",
-                pos=(375, 855),
+                pos=(400, 855),
                 readonly=True,
                 multiline=True,
                 width=450,
@@ -256,7 +256,7 @@ def build():
             # dpg.add_text(default_value="Battery Voltage:", pos=(25, 475))
             # dpg.add_text(default_value="7.7", pos=(150, 475), color=(255, 100, 100, 255))
 
-        with dpg.group(pos=(25, 815)):
+        with dpg.group(pos=(900, 815)):
             dpg.add_text("Run Sequence:")
             dpg.add_combo(["x", "s"], width=250, tag="main_tab_sequence_select")
             with dpg.group(horizontal=True):

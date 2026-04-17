@@ -1,42 +1,41 @@
 #include <Servo.h>
-#include <MemoryFree.h>
+#include <Wire.h>
 
-uint8_t valveStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-uint8_t valvePins[12] = { 13, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-bool valveIsCryo[12] = { true, true, true, true, true, true, true, true, true, true, true, false };
-float valveAngle[12] = {};
-bool valveClosing[12] = {};
-bool needsOpeningBackoff[12] = {};
-bool needsClosingBackoff[12] = {};
-float lastOpeningCommand[12] = {};
-float lastClosingCommand[12] = {};
-uint8_t limitSwitchPins[12] = {
-  27,
-  29,
-  31,
-  33,
-  35,
-  37,
-  39,
-  41,
-  43,
-  45,
-  47,
-  49,
-};
+// uint8_t valveStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+// uint8_t valvePins[12] = { 13, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+// bool valveIsCryo[12] = { true, true, true, true, true, true, true, true, true, true, true, false };
+// float valveAngle[12] = {};
+// bool valveClosing[12] = {};
+// bool needsOpeningBackoff[12] = {};
+// bool needsClosingBackoff[12] = {};
+// float lastOpeningCommand[12] = {};
+// float lastClosingCommand[12] = {};
+// uint8_t limitSwitchPins[12] = {
+//   27,
+//   29,
+//   31,
+//   33,
+//   35,
+//   37,
+//   39,
+//   41,
+//   43,
+//   45,
+//   47,
+//   49,
+// };
 
 // RS485 valves  
-uint8_t rs485ValveAddresses[12] = { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
-uint8_t rs485ValveAngles[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-uint8_t rs485ValveDesiredStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t rs485ValveAddresses[24] = { 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35 };
+uint8_t rs485ValveAngles[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+uint8_t rs485ValveDesiredStates[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 float lastValveStatePrint = 0.0;
+float lastPTTCPrint = 0.125; // Start 1/8 sec out of phase to avoid blowing up loop
 
 // Incoming messagse serial que
 char partialCommand[100] = "";
 int partialCommandIndex = 0;
-
-Servo servos[12];
 
 int nonCryo_open = 10;
 int nonCryo_mostlyClosed = 75;
@@ -64,6 +63,25 @@ double pyro2Start = 0;
 #define PYRO1_PIN 22
 #define PYRO2_PIN 24
 
+// TC Registers
+#define REG_HOT_JUNCTION_TEMP 0x00  // Hot Junction Temperature Register
+#define REG_COLD_JUNCTION_TEMP 0x02 // Cold Junction Temperature Register
+#define REG_THERMOCOUPLE_CFG 0x05   // Thermocouple Configuration Register
+
+// PT List, need to list Min, Max pressure, Min, Max Output, attatchment pins, names
+float ptPressureRange[4][2] = {{0, 1000}, {0, 100}, {0, 100}, {0, 100}};
+float ptOutputRange[4][2] = {{0.5, 4.5}, {0, 5}, {0, 5}, {0, 5}};
+uint8_t ptPins[4] = {0, 1, 2, 3};
+float ptValue[4] = {0.0, 0.0, 0.0, 0.0};
+//char ptNames[4][12] = {"PT1", "PT2", "PT3", "PT4"};
+uint8_t ptIds[4] = {0, 1, 2, 3};
+
+// TC List, need to store TC Address, name, type
+uint8_t tcAddress[4] = {0x61, 0x62, 0x63, 0x64};
+float tcHotValue[4] = {0.0, 0.0, 0.0, 0.0};
+float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
+uint8_t tcIds[4] = {4, 5, 6, 7};
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
@@ -72,15 +90,12 @@ void setup() {
 
   pinMode(A4, INPUT);
 
-  for (int i = 0; i < 12; i++) {
-    pinMode(valvePins[i], OUTPUT);
-    pinMode(limitSwitchPins[i], INPUT);
+  // for (int i = 0; i < 12; i++) {
+  //   pinMode(valvePins[i], OUTPUT);
+  //   pinMode(limitSwitchPins[i], INPUT);
 
-    servos[i].attach(valvePins[i]);
-    servos[i].write(valveIsCryo[i] ? cryo_mostlyClosed : nonCryo_mostlyClosed);
-
-    valveAngle[i] = valveIsCryo[i] ? cryo_mostlyClosed : nonCryo_mostlyClosed;
-  }
+  //   valveAngle[i] = valveIsCryo[i] ? cryo_mostlyClosed : nonCryo_mostlyClosed;
+  // }
 
   pinMode(46, OUTPUT);
 
@@ -89,6 +104,18 @@ void setup() {
   pinMode(PYRO2_PIN, OUTPUT);
   digitalWrite(PYRO1_PIN, LOW);
   digitalWrite(PYRO2_PIN, LOW);
+
+  // Configureing pinmodes for the PT sensors
+  for (int i = 0; i < (sizeof(ptPins) / sizeof(ptPins[0])); i++)
+  {
+    pinMode(ptPins[i], INPUT);
+  }
+
+  // Config for the TCs
+  for (int i = 0; i < (sizeof(tcAddress) / sizeof(tcAddress[0])); i++)
+  {
+    configureSensor(tcAddress[i]);
+  }
 }
 
 
@@ -117,6 +144,7 @@ void loop() {
       partialCommand[partialCommandIndex] = '}';
 
       for (int i = 0;
+           // Allows changing the size of the partialCommand buffer
            i < (sizeof(partialCommand) / sizeof(partialCommand[0]));
            i++) {
         if (i <= partialCommandIndex) {
@@ -142,71 +170,22 @@ void loop() {
   }
 
   if (commandInt == 1) {
-    int valveIndex = commandAddress;
-
-    // Servo valve
-    if (valveIndex >= 0 && valveIndex <= 11) {  // Checking that the index is within range
-      if (valveStates[valveIndex] == 0) {
-        valveStates[valveIndex] = 1;
-
-        if (valveIsCryo[valveIndex]) {
-          valveAngle[valveIndex] = cryo_open + cryo_openBackoff;
-          servos[valveIndex].write(cryo_open + cryo_openBackoff);
-        } else {
-          valveAngle[valveIndex] = nonCryo_open - nonCryo_openBackoff;
-          servos[valveIndex].write(nonCryo_open - nonCryo_openBackoff);
-        }
-
-        valveClosing[valveIndex] = false;
-        needsClosingBackoff[valveIndex] = false;
-        needsOpeningBackoff[valveIndex] = true;
-        lastOpeningCommand[valveIndex] = t;
-      }
-    }
-
-    // RS485 valve
-    if (valveIndex >= 12) {
-      int valveAddress = commandAddress;
-
+    if (commandAddress >= 12) {
       char buffer[10];
-      sprintf(buffer, "{%02d,01}", valveAddress);
+      sprintf(buffer, "{%02d,01}", commandAddress);
       Serial3.println(buffer);
 
-      rs485ValveDesiredStates[valveIndex - 12] = 1;
+      rs485ValveDesiredStates[commandAddress - 12] = 1;
     }
   }
 
   if (commandInt == 2) {
-    int valveIndex = commandAddress;
-
-    // Servo motor valve
-    if (valveIndex >= 0 && valveIndex <= 11) {
-      if (valveStates[valveIndex] == 1) {  // Checking that the index is within range
-        valveStates[valveIndex] = 0;
-
-        if (valveIsCryo[valveIndex]) {
-          servos[valveIndex].write(cryo_mostlyClosed);
-          valveAngle[valveIndex] = cryo_mostlyClosed;
-        } else {
-          servos[valveIndex].write(nonCryo_mostlyClosed);
-          valveAngle[valveIndex] = nonCryo_mostlyClosed;
-        }
-
-        valveClosing[valveIndex] = true;
-        needsOpeningBackoff[valveIndex] = false;
-        lastClosingCommand[valveIndex] = t;
-      }
-    }
-
-    // RS485 valve
-    if (valveIndex >= 12) {
-      int valveAddress = commandAddress;
-
+    if (commandAddress >= 12) {
       char buffer[10];
-      sprintf(buffer, "{%02d,02}", valveAddress);
+      sprintf(buffer, "{%02d,02}", commandAddress);
       Serial3.println(buffer);
 
-      rs485ValveDesiredStates[valveIndex - 12] = 0;
+      rs485ValveDesiredStates[commandAddress - 12] = 0;
     }
   }
 
@@ -261,52 +240,52 @@ void loop() {
 
   // Handling valve updates and backoffs
   // Open backoff delays
-  for (int i = 0; i < (sizeof(servos) / sizeof(servos[0])); i++) {
-    if (needsOpeningBackoff[i] && (t - lastOpeningCommand[i]) > (valveIsCryo[i] ? cryo_openBackoffDelay : nonCryo_openBackoffDelay)) {
-      needsOpeningBackoff[i] = false;
-      if (valveIsCryo[i]) {
-        servos[i].write(cryo_open);
-        valveAngle[i] = cryo_open;
-      } else {
-        servos[i].write(nonCryo_open);
-        valveAngle[i] = nonCryo_open;
-      }
-    }
+  // for (int i = 0; i < (sizeof(servos) / sizeof(servos[0])); i++) {
+  //   if (needsOpeningBackoff[i] && (t - lastOpeningCommand[i]) > (valveIsCryo[i] ? cryo_openBackoffDelay : nonCryo_openBackoffDelay)) {
+  //     needsOpeningBackoff[i] = false;
+  //     if (valveIsCryo[i]) {
+  //       servos[i].write(cryo_open);
+  //       valveAngle[i] = cryo_open;
+  //     } else {
+  //       servos[i].write(nonCryo_open);
+  //       valveAngle[i] = nonCryo_open;
+  //     }
+  //   }
 
-    if (needsClosingBackoff[i] && (t - lastClosingCommand[i]) > (valveIsCryo[i] ? cryo_closeBackoffDelay : nonCryo_closeBackoffDelay)) {
-      needsClosingBackoff[i] = false;
-      if (valveIsCryo[i]) {
-        servos[i].write(valveAngle[i] + cryo_closeBackoff);
-        valveAngle[i] = valveAngle[i] + cryo_closeBackoff;
-      } else {
-        servos[i].write(valveAngle[i] - nonCryo_closeBackoff);
-        valveAngle[i] = valveAngle[i] - nonCryo_closeBackoff;
-      }
-    }
+  //   if (needsClosingBackoff[i] && (t - lastClosingCommand[i]) > (valveIsCryo[i] ? cryo_closeBackoffDelay : nonCryo_closeBackoffDelay)) {
+  //     needsClosingBackoff[i] = false;
+  //     if (valveIsCryo[i]) {
+  //       servos[i].write(valveAngle[i] + cryo_closeBackoff);
+  //       valveAngle[i] = valveAngle[i] + cryo_closeBackoff;
+  //     } else {
+  //       servos[i].write(valveAngle[i] - nonCryo_closeBackoff);
+  //       valveAngle[i] = valveAngle[i] - nonCryo_closeBackoff;
+  //     }
+  //   }
 
-    if (valveClosing[i]) {
-      if ((digitalRead(limitSwitchPins[i]) == 1) || (valveIsCryo[i] ? (valveAngle[i] < cryo_closed) : (valveAngle[i] > nonCryo_closed))) {
-        valveClosing[i] = 0;
+  //   if (valveClosing[i]) {
+  //     if ((digitalRead(limitSwitchPins[i]) == 1) || (valveIsCryo[i] ? (valveAngle[i] < cryo_closed) : (valveAngle[i] > nonCryo_closed))) {
+  //       valveClosing[i] = 0;
 
-        needsClosingBackoff[i] = true;
-        lastClosingCommand[i] = t;
+  //       needsClosingBackoff[i] = true;
+  //       lastClosingCommand[i] = t;
 
-        // servos[i].write(valveAngle[i] - 1.5);
-        // valveAngle[i] = valveAngle[i] - 1.5;
+  //       // servos[i].write(valveAngle[i] - 1.5);
+  //       // valveAngle[i] = valveAngle[i] - 1.5;
 
-        // servos[i].write(valveAngle[i] - backoff);
-        // valveAngle[i] = valveAngle[i] - backoff;
-      } else if ((t - lastClosingCommand[i]) > 0.5) {
-        if (valveIsCryo[i]) {
-          servos[i].write(valveAngle[i] - 0.5);
-          valveAngle[i] = valveAngle[i] - 0.5;
-        } else {
-          servos[i].write(valveAngle[i] + 0.5);
-          valveAngle[i] = valveAngle[i] + 0.5;
-        }
-      }
-    }
-  }
+  //       // servos[i].write(valveAngle[i] - backoff);
+  //       // valveAngle[i] = valveAngle[i] - backoff;
+  //     } else if ((t - lastClosingCommand[i]) > 0.5) {
+  //       if (valveIsCryo[i]) {
+  //         servos[i].write(valveAngle[i] - 0.5);
+  //         valveAngle[i] = valveAngle[i] - 0.5;
+  //       } else {
+  //         servos[i].write(valveAngle[i] + 0.5);
+  //         valveAngle[i] = valveAngle[i] + 0.5;
+  //       }
+  //     }
+  //   }
+  // }
 
   delay(20);
 
@@ -326,7 +305,28 @@ void loop() {
     lastValveStatePrint = t;
   }
 
-  digitalWrite(46, valveStates[0]);
+  digitalWrite(46, (rs485ValveAngles[0] <= 30 || rs485ValveAngles[0] > 80) ? 1 : 0);
+
+  // Read sensors
+  // PT Read
+  for (int i = 0; i < (sizeof(ptPins) / sizeof(ptPins[0])); i++)
+  {
+    ptValue[i] = (analogRead(ptPins[i]) / 1023.0 * 5.0 - ptOutputRange[i][0]) / (ptOutputRange[i][1] - ptOutputRange[i][0]) * (ptPressureRange[i][1] - ptPressureRange[i][0]) + ptPressureRange[i][0];
+  }
+
+  // TC Read
+  for (int i = 0; i < (sizeof(tcAddress) / sizeof(tcAddress[0])); i++)
+  {
+    tcHotValue[i] = readTempRegister(tcAddress[i], REG_HOT_JUNCTION_TEMP);
+    tcColdValue[i] = readTempRegister(tcAddress[i], REG_COLD_JUNCTION_TEMP);
+  }
+
+  // Print PT and TC values if needed
+  if ((t - lastPTTCPrint) > 0.5) {
+    lastPTTCPrint = t;
+    printPTReadings();
+    printTCReadings();
+  }
 }
 
 
@@ -348,7 +348,7 @@ void updateRS485ValveAngles() {
   char buf[40];
   char cmd[16];
 
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     int addr = rs485ValveAddresses[i];
     sprintf(cmd, "{%02d,32}", addr);
 
@@ -444,27 +444,14 @@ void printDesiredValveStates() {
   Serial.print("{1");
   for (int i = 0; i < 12; i++) {
     Serial.print(",");
-    Serial.print(valveStates[i]);
-  }
-
-  for (int i = 0; i < 12; i++) {
-    Serial.print(",");
     Serial.print(rs485ValveDesiredStates[i]);
   }
-
   Serial.println("}");
 }
 
 void printActualValveStates() {
   Serial.print("{2");
-  for (int i = 0; i < 12; i++) {
-    Serial.print(",");
-    Serial.print(!digitalRead(limitSwitchPins[i]));
-  }
-
-
-  
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i];
     if (angle > 30 && angle < 80) {
@@ -473,21 +460,41 @@ void printActualValveStates() {
       Serial.print("1");  // Open
     }
   }
-
-Serial.println("}");
-
+  Serial.println("}");
 }
 
 
 void printRS485ValvePercentages() {
   Serial.print("{4");
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     uint8_t angle = rs485ValveAngles[i]; //raw angle received
     int percent = angle - 50;   // convert raw angle to percent 
     Serial.print(percent);      //Removed constrain to see if any weird values occur
   }
 
+  Serial.println("}");
+}
+
+void printPTReadings() {
+  Serial.print("{5");
+  // Support adding more PTs without changing code
+  for (int i = 0; i < sizeof(ptPins)/sizeof(ptPins[0]); i++) {
+    Serial.print(",");
+    Serial.print(ptValue[i]);
+  }
+  Serial.println("}");
+}
+
+void printTCReadings() {
+  Serial.print("{6");
+  // Support adding more PTs without changing code
+  for (int i = 0; i < sizeof(tcAddress)/sizeof(tcAddress); i++) {
+    Serial.print(",");
+    Serial.print(tcHotValue[i]);
+    Serial.print(",");
+    Serial.print(tcColdValue[i]);
+  }
   Serial.println("}");
 }
 
@@ -599,4 +606,42 @@ float extractFloat(const char str[], int i) {
   // Convert to float
   if (j == 0) return -9999;  // No valid number found
   return atof(tempBuffer);
+}
+
+// Write registers from TC chips
+void writeRegister(uint8_t addr, uint8_t reg, uint8_t value)
+{
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+// Configure thermocouple wtih type
+void configureSensor(uint8_t addr)
+{
+  // 0 is type K, only type being used
+  writeRegister(addr, REG_THERMOCOUPLE_CFG, 0);
+  // Serial.print("Set sensor at 0x");
+  // Serial.print(addr, HEX);
+  // Serial.print(" to Type: ");
+  // Serial.println(type);
+}
+
+// Read registers from TC chips
+float readTempRegister(uint8_t addr, uint8_t reg)
+{
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.endTransmission();
+
+  Wire.requestFrom(addr, (uint8_t)2);
+  if (Wire.available() < 2)
+  {
+    return NAN; // Return NaN if no response
+  }
+
+  int16_t rawData = (Wire.read() << 8) | Wire.read();
+
+  return rawData * 0.0625; // Convert raw data to temperature in °C
 }

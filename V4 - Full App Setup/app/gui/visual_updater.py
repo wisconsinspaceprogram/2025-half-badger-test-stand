@@ -124,7 +124,7 @@ def update_thread():
                         dpg.hide_item(tag)
 
                 # Deleting any disabled channels from the plots
-                for i in range(24):
+                for i in range(36):
                     if not ((i + 1) in active_channels) and dpg.does_item_exist(f"T7_CH{i+1}_main_plot"):
                         dpg.delete_item(f"T7_CH{i+1}_main_plot")
 
@@ -315,18 +315,15 @@ def update_thread():
                 valve_locations = ECU_Poller.get_valve_locations()
                 pyro_states = ECU_Poller.get_pyro_channel_states()
 
-
-                rs485_percentages = ECU_Poller.get_rs485_valve_percentages() #gets values from ECU_Poller
-                for i in range(12):
-                    tag = f"rs485_valve_{i+12}" #gives each value a unique tag 
-                    if dpg.does_item_exist(tag): 
-                        dpg.set_value(tag, f"{rs485_percentages[i]}%") # sets the value of each tag to the corresponding percentage value
-
-                
+                rs485_percentages = ECU_Poller.get_rs485_valve_percentages()  # gets values from ECU_Poller
+                for i in range(24):
+                    tag = f"rs485_valve_{i+12}"  # gives each value a unique tag
+                    if dpg.does_item_exist(tag):
+                        dpg.set_value(tag, f"{rs485_percentages[i]}%")  # sets the value of each tag to the corresponding percentage value
 
                 valve_tags = main_tab.get_pnid_valve_tags()
 
-                for i in range(0, 24):
+                for i in range(0, 36):
                     dpg.set_value(f"valve_loc_{i}", valve_locations[i])
 
                     # Getting the tags of the on PNID states

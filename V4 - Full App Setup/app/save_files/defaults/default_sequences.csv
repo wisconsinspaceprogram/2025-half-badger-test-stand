@@ -121,3 +121,9 @@ Poll,,,,0.0
 Wait,,,,4.0
 Open,IPA Tank Vent,,,0.0
 Open,LOX Tank Vent,,,0.0
+###
+IPA Main 1s
+Wait,,,,0.5
+Open,IPA Main,,,0.0
+Wait,,,,5.0
+Close,IPA Main,,,0.0

@@ -16,7 +16,7 @@ def custom_location_combo_callback(sender, app_data, user_data):
 
 def send_config_data(sender, app_data, user_data):
     new_locs = []
-    for i in range(24):
+    for i in range(36):
         location = dpg.get_value(f"valve_loc_combo_{i}")
 
         if location == "Not Connected":
@@ -41,9 +41,9 @@ def callback_save_config():
 
     valve_save_data = f"{dpg.get_value('ecu_port_input')},{dpg.get_value('ecu_baud_input')}\n"
 
-    for i in range(24):
+    for i in range(36):
         valve_save_data += generate_channel_valve_string(i)
-        if i != 23:
+        if i != 35:
             valve_save_data += "\n"
 
     dpg.show_item("valve_save_dialog")
@@ -141,7 +141,7 @@ def build():
             dpg.add_table_column(label="Valve Location", init_width_or_weight=0.2)
             dpg.add_table_column(label="Curretn State", init_width_or_weight=0.2)
 
-            for i in range(24):
+            for i in range(36):
                 with dpg.table_row():
                     # dpg.add_checkbox()
                     dpg.add_text(str(i))

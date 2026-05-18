@@ -7,6 +7,8 @@ sequences = []
 active_sequence_index = -1
 active_sequence_step = -1
 next_step_time = 0
+pending_sequence_mode = ""
+uploaded_sequence_index = -1
 
 
 def update_sequence_steps(new_sequnces):
@@ -27,25 +29,48 @@ def get_names():
     return sequence_names
 
 
-def run_sequence(sequence_index: int):
+def _queue_sequence_request(sequence_index: int, mode: str):
     global active_sequence_index
     global active_sequence_step
     global next_step_time
+    global pending_sequence_mode
 
     if active_sequence_index == -1:
         active_sequence_index = sequence_index
         active_sequence_step = 0
         next_step_time = time.time()
+        pending_sequence_mode = mode
 
         ECU_Poller.set_poll_rs485(False)
+        return True
+
+    return False
+
+
+def run_sequence(sequence_index: int):
+    return _queue_sequence_request(sequence_index, "upload_and_start")
+
+
+def upload_sequence(sequence_index: int):
+    return _queue_sequence_request(sequence_index, "upload_only")
+
+
+def start_uploaded_sequence(sequence_index: int):
+    if uploaded_sequence_index != sequence_index:
+        print("[SEQUENCE] Selected sequence has not been uploaded. Upload it before starting.")
+        return False
+
+    return _queue_sequence_request(sequence_index, "start_only")
 
 
 def cancel_sequence():
     global active_sequence_index
     global active_sequence_step
+    global pending_sequence_mode
 
     active_sequence_index = -1
     active_sequence_step = -1
+    pending_sequence_mode = ""
 
 
 def get_sequence_step():
@@ -116,7 +141,8 @@ def _build_ecu_upload_steps(sequence_steps):
 def start_sequence_runner():
     global active_sequence_index
     global active_sequence_step
-    global next_step_time
+    global pending_sequence_mode
+    global uploaded_sequence_index
 
     main_thread = threading.main_thread()
 
@@ -126,22 +152,46 @@ def start_sequence_runner():
                 if active_sequence_index >= len(sequences):
                     raise ValueError(f"Invalid active sequence index: {active_sequence_index}")
 
-                ecu_steps = _build_ecu_upload_steps(sequences[active_sequence_index])
-                result = ECU_Poller.upload_sequence_and_start_blocking(ecu_steps)
+                request_mode = pending_sequence_mode or "upload_and_start"
 
-                if not result.get("success", False):
-                    print(f"[SEQUENCE] ECU upload/start failed: {result}")
-                else:
-                    print(f"[SEQUENCE] ECU upload/start success. steps={result.get('steps_uploaded', 0)}")
+                if request_mode in ("upload_only", "upload_and_start"):
+                    ecu_steps = _build_ecu_upload_steps(sequences[active_sequence_index])
+                    uploaded_sequence_index = -1
+
+                    upload_result = ECU_Poller.upload_sequence_blocking(ecu_steps)
+
+                    if not upload_result.get("success", False):
+                        print(f"[SEQUENCE] ECU upload failed: {upload_result}")
+                    else:
+                        uploaded_sequence_index = active_sequence_index
+                        print(f"[SEQUENCE] ECU upload success. steps={upload_result.get('steps_uploaded', 0)}")
+
+                        if request_mode == "upload_and_start":
+                            start_result = ECU_Poller.start_uploaded_sequence_blocking()
+                            if not start_result.get("success", False):
+                                print(f"[SEQUENCE] ECU start failed: {start_result}")
+                            else:
+                                print("[SEQUENCE] ECU sequence started; resuming polling immediately.")
+                        else:
+                            print("[SEQUENCE] ECU sequence uploaded and ready to start.")
+
+                elif request_mode == "start_only":
+                    if uploaded_sequence_index != active_sequence_index:
+                        print("[SEQUENCE] Selected sequence has not been uploaded. Upload it before starting.")
+                    else:
+                        start_result = ECU_Poller.start_uploaded_sequence_blocking()
+                        if not start_result.get("success", False):
+                            print(f"[SEQUENCE] ECU start failed: {start_result}")
+                        else:
+                            print("[SEQUENCE] ECU sequence started; resuming polling immediately.")
 
             except Exception as e:
-                print(f"[SEQUENCE] Failed to build/upload sequence: {e}")
+                print(f"[SEQUENCE] Failed to process sequence request: {e}")
             finally:
                 active_sequence_index = -1
                 active_sequence_step = -1
+                pending_sequence_mode = ""
                 ECU_Poller.set_poll_rs485(True)
 
         else:
             time.sleep(0.01)
-            # print(sequence_names)
-            # print(sequences)

@@ -99,8 +99,6 @@ float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
 uint8_t tcIds[4] = {4, 5, 6, 7};
 
 // ECU-side sequence commands
-#define ECU_CMD_TELEMETRY_PAUSE 40
-#define ECU_CMD_TELEMETRY_RESUME 41
 #define ECU_CMD_STOP_SEQUENCE 21
 #define ECU_CMD_UPLOAD_SEQUENCE_BEGIN 30
 #define ECU_CMD_UPLOAD_SEQUENCE_STEP 31
@@ -124,7 +122,6 @@ struct EcuSequenceStep {
 bool ecuSequenceRunning = false;
 int ecuSequenceStepIndex = 0;
 unsigned long ecuSequenceNextStepAtMs = 0;
-bool telemetryPaused = false;
 
 EcuSequenceStep ecuUploadedSequence[ECU_UPLOADED_SEQUENCE_MAX_STEPS];
 int ecuUploadedSequenceExpectedSteps = 0;
@@ -183,9 +180,36 @@ bool beginUploadedSequence(int expectedSteps) {
   return true;
 }
 
-bool addUploadedSequenceStep(uint8_t action, uint8_t target, uint16_t value) {
+bool addUploadedSequenceStep(int stepIndex, uint8_t action, uint8_t target, uint16_t value) {
   if (!ecuSequenceUploadInProgress) {
     Serial.println("[ECU] upload step rejected (no upload in progress)");
+    return false;
+  }
+
+  if (stepIndex < 0 || stepIndex >= ecuUploadedSequenceExpectedSteps || stepIndex >= ECU_UPLOADED_SEQUENCE_MAX_STEPS) {
+    Serial.print("[ECU] upload step rejected (bad index) index=");
+    Serial.println(stepIndex);
+    return false;
+  }
+
+  if (stepIndex < ecuUploadedSequenceCount) {
+    const EcuSequenceStep& existingStep = ecuUploadedSequence[stepIndex];
+    if (existingStep.action == action && existingStep.valveAddress == target && existingStep.waitMs == value) {
+      Serial.print("[ECU] upload step duplicate ack index=");
+      Serial.println(stepIndex);
+      return true;
+    }
+
+    Serial.print("[ECU] upload step rejected (conflicting retry) index=");
+    Serial.println(stepIndex);
+    return false;
+  }
+
+  if (stepIndex > ecuUploadedSequenceCount) {
+    Serial.print("[ECU] upload step rejected (out of order) index=");
+    Serial.print(stepIndex);
+    Serial.print(" expected=");
+    Serial.println(ecuUploadedSequenceCount);
     return false;
   }
 
@@ -194,9 +218,9 @@ bool addUploadedSequenceStep(uint8_t action, uint8_t target, uint16_t value) {
     return false;
   }
 
-  ecuUploadedSequence[ecuUploadedSequenceCount].action = action;
-  ecuUploadedSequence[ecuUploadedSequenceCount].valveAddress = target;
-  ecuUploadedSequence[ecuUploadedSequenceCount].waitMs = value;
+  ecuUploadedSequence[stepIndex].action = action;
+  ecuUploadedSequence[stepIndex].valveAddress = target;
+  ecuUploadedSequence[stepIndex].waitMs = value;
   ecuUploadedSequenceCount += 1;
   return true;
 }
@@ -240,23 +264,44 @@ void updateEcuSequence() {
   }
 
   if (ecuSequenceStepIndex >= ecuUploadedSequenceCount) {
-    Serial.println("[ECU] sequence complete");
+    Serial.print("[ECU] sequence complete: executed ");
+    Serial.print(ecuSequenceStepIndex);
+    Serial.print(" of ");
+    Serial.println(ecuUploadedSequenceCount);
     stopEcuSequence();
     return;
   }
 
   const EcuSequenceStep& step = ecuUploadedSequence[ecuSequenceStepIndex];
+  
+  Serial.print("[ECU SEQ] step ");
+  Serial.print(ecuSequenceStepIndex);
+  Serial.print(" action=");
+  Serial.print(step.action);
+  Serial.print(" target=");
+  Serial.print(step.valveAddress);
+  Serial.print(" value=");
+  Serial.println(step.waitMs);
 
   if (step.action == ECU_SEQUENCE_ACTION_OPEN) {
+    Serial.print("[ECU SEQ] OPEN valve addr=");
+    Serial.println(step.valveAddress);
     forwardRs485ValveCommand(step.valveAddress, 1);
     ecuSequenceNextStepAtMs = nowMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_CLOSE) {
+    Serial.print("[ECU SEQ] CLOSE valve addr=");
+    Serial.println(step.valveAddress);
     forwardRs485ValveCommand(step.valveAddress, 2);
     ecuSequenceNextStepAtMs = nowMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_WAIT) {
+    Serial.print("[ECU SEQ] WAIT for ");
+    Serial.print(step.waitMs);
+    Serial.println("ms");
     ecuSequenceNextStepAtMs = nowMs + step.waitMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_FIRE) {
     int pyroIndex = step.valveAddress;
+    Serial.print("[ECU SEQ] FIRE pyro index=");
+    Serial.println(pyroIndex);
     if (pyroIndex == 0) {
       pyro1Start = nowMs / 1000.0;
       pyro1 = 1;
@@ -266,10 +311,13 @@ void updateEcuSequence() {
     }
     ecuSequenceNextStepAtMs = nowMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_POLL) {
+    Serial.println("[ECU SEQ] POLL");
     updateRS485ValveAngles();
     telemetryRequested = true;
     ecuSequenceNextStepAtMs = nowMs;
   } else {
+    Serial.print("[ECU SEQ] UNKNOWN action ");
+    Serial.println(step.action);
     ecuSequenceNextStepAtMs = nowMs;
   }
 
@@ -421,23 +469,8 @@ void loop() {
 
   if (commandInt == 5) {
     debugLog("[ECU] telemetry poll received");
-    if (!telemetryPaused) {
-      updateRS485ValveAngles();
-      telemetryRequested = true;
-    }
-  }
-
-  if (commandInt == ECU_CMD_TELEMETRY_PAUSE) {
-    telemetryPaused = true;
-    telemetryRequested = false;
-    debugLog("[ECU] telemetry paused");
-    sendAck(commandAddress, commandInt);
-  }
-
-  if (commandInt == ECU_CMD_TELEMETRY_RESUME) {
-    telemetryPaused = false;
-    debugLog("[ECU] telemetry resumed");
-    sendAck(commandAddress, commandInt);
+    updateRS485ValveAngles();
+    telemetryRequested = true;
   }
 
   if (commandInt == ECU_CMD_STOP_SEQUENCE) {
@@ -453,12 +486,13 @@ void loop() {
   }
 
   if (commandInt == ECU_CMD_UPLOAD_SEQUENCE_STEP) {
-    int action = extractIntAfterNthComma(command, 1);
-    int target = extractIntAfterNthComma(command, 2);
-    int value = extractIntAfterNthComma(command, 3);
+    int stepIndex = extractIntAfterNthComma(command, 1);
+    int action = extractIntAfterNthComma(command, 2);
+    int target = extractIntAfterNthComma(command, 3);
+    int value = extractIntAfterNthComma(command, 4);
 
-    if (action >= 0 && target >= 0 && value >= 0) {
-      if (addUploadedSequenceStep((uint8_t)action, (uint8_t)target, (uint16_t)value)) {
+    if (stepIndex >= 0 && action >= 0 && target >= 0 && value >= 0) {
+      if (addUploadedSequenceStep(stepIndex, (uint8_t)action, (uint8_t)target, (uint16_t)value)) {
         sendAck(commandAddress, commandInt);
       }
     }

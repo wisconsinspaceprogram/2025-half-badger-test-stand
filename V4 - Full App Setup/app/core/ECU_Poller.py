@@ -21,18 +21,15 @@ DEBUG_ECU_RX = True
 DEBUG_ECU_TX = True
 
 POLL_RS485_COMMAND = "{00,5}"
-TELEMETRY_PAUSE_COMMAND = "{0,40}"
-TELEMETRY_RESUME_COMMAND = "{0,41}"
 STOP_ECU_SEQUENCE_COMMAND = "{0,21}"
 UPLOAD_ECU_SEQUENCE_BEGIN_COMMAND_PREFIX = "{0,30,"
 UPLOAD_ECU_SEQUENCE_STEP_COMMAND_PREFIX = "{0,31,"
 UPLOAD_ECU_SEQUENCE_START_COMMAND = "{0,32}"
 ACK_COMMAND_PREFIX = "{7,"
-COMMAND_ACK_TIMEOUT_S = 0.65
-COMMAND_MAX_RETRIES = 3
+COMMAND_ACK_TIMEOUT_S = 0.35
+COMMAND_MAX_RETRIES = 5
 ACK_LATENCY_HISTORY_SIZE = 200
-MANUAL_COMMAND_TELEMETRY_WAIT_S = 0.75
-MANUAL_COMMAND_POST_TELEMETRY_GAP_S = 0.2
+MANUAL_COMMAND_POST_POLL_GAP_S = 1.0
 
 command_queue = queue.Queue()
 command_ack_event = threading.Event()
@@ -64,11 +61,11 @@ tx_file_name = ""
 
 rs485_poll_enabled = True
 last_rs485_poll = time.time()
+last_rs485_poll_sent = 0.0
 
-# Manual command gating: wait for complete telemetry block before sending command.
+# Manual command gating: stop polls and wait a strict gap after the last poll TX.
 manual_command_window_enabled = True
 manual_command_pending_event = threading.Event()
-manual_command_ready_event = threading.Event()
 manual_pending_commands = queue.Queue()
 manual_pending_worker_started = False
 manual_pending_worker_lock = threading.Lock()
@@ -181,7 +178,7 @@ def poll_rs485():
     queue_command(POLL_RS485_COMMAND, retries=3)
 
 
-def upload_sequence_and_start_blocking(steps, retries: int = COMMAND_MAX_RETRIES):
+def upload_sequence_blocking(steps, retries: int = COMMAND_MAX_RETRIES):
     if steps is None or len(steps) == 0:
         return {
             "success": False,
@@ -192,38 +189,67 @@ def upload_sequence_and_start_blocking(steps, retries: int = COMMAND_MAX_RETRIES
     # Stop any running ECU-side sequence before uploading a new one.
     stop_ecu_sequence_blocking(retries=retries)
 
-    begin_result = queue_command_and_wait(
-        f"{UPLOAD_ECU_SEQUENCE_BEGIN_COMMAND_PREFIX}{len(steps)}}}",
-        retries=retries,
-    )
+    begin_cmd = f"{UPLOAD_ECU_SEQUENCE_BEGIN_COMMAND_PREFIX}{len(steps)}}}"
+    print(f"[SEQUENCE] Uploading begin cmd: {begin_cmd} (len={len(begin_cmd)})")
+    begin_result = queue_command_and_wait(begin_cmd, retries=retries)
     if not begin_result.get("success", False):
+        print(f"[SEQUENCE] Begin command failed: {begin_result}")
         begin_result["stage"] = "begin"
         return begin_result
 
+    last_step_result = None
     for i, step in enumerate(steps):
         action = int(step[0])
         target = int(step[1])
         value = int(step[2])
-        step_result = queue_command_and_wait(
-            f"{UPLOAD_ECU_SEQUENCE_STEP_COMMAND_PREFIX}{action},{target},{value}}}",
-            retries=retries,
-        )
+        step_cmd = f"{UPLOAD_ECU_SEQUENCE_STEP_COMMAND_PREFIX}{i},{action},{target},{value}}}"
+        print(f"[SEQUENCE] Step {i}: {step_cmd} (action={action}, target={target}, value={value})")
+        step_result = queue_command_and_wait(step_cmd, retries=retries)
         if not step_result.get("success", False):
+            print(f"[SEQUENCE] Step {i} command failed: {step_result}")
             step_result["stage"] = "step"
             step_result["step_index"] = i
             step_result["step"] = [action, target, value]
             return step_result
-
-    start_result = queue_command_and_wait(UPLOAD_ECU_SEQUENCE_START_COMMAND, retries=retries)
-    if not start_result.get("success", False):
-        start_result["stage"] = "start"
-        return start_result
+        last_step_result = step_result
 
     return {
         "success": True,
         "steps_uploaded": len(steps),
         "begin": begin_result,
+        "last_step": last_step_result,
+    }
+
+
+def start_uploaded_sequence_blocking(retries: int = COMMAND_MAX_RETRIES):
+    print(f"[SEQUENCE] All steps uploaded, sending start cmd: {UPLOAD_ECU_SEQUENCE_START_COMMAND}")
+    start_result = queue_command_and_wait(UPLOAD_ECU_SEQUENCE_START_COMMAND, retries=retries)
+    if not start_result.get("success", False):
+        print(f"[SEQUENCE] Start command failed: {start_result}")
+        start_result["stage"] = "start"
+        return start_result
+
+    return {
+        "success": True,
         "start": start_result,
+    }
+
+
+def upload_sequence_and_start_blocking(steps, retries: int = COMMAND_MAX_RETRIES):
+    upload_result = upload_sequence_blocking(steps, retries=retries)
+    if not upload_result.get("success", False):
+        return upload_result
+
+    start_result = start_uploaded_sequence_blocking(retries=retries)
+    if not start_result.get("success", False):
+        return start_result
+
+    return {
+        "success": True,
+        "steps_uploaded": len(steps),
+        "begin": upload_result.get("begin"),
+        "last_step": upload_result.get("last_step"),
+        "start": start_result.get("start"),
     }
 
 
@@ -299,10 +325,8 @@ def mark_telemetry_frame(frame_id: int):
         telemetry_frame_seen[frame_id] = True
 
     if all(telemetry_frame_seen.values()):
-        if manual_command_pending_event.is_set() and DEBUG_ECU_RX:
-            print("[ECU_RX] telemetry block complete; releasing pending manual command")
-        manual_command_ready_event.set()
-        manual_command_pending_event.clear()
+        if DEBUG_ECU_RX:
+            print("[ECU_RX] telemetry block complete")
         reset_telemetry_block_tracking()
 
 
@@ -333,14 +357,16 @@ def _manual_pending_worker_loop():
     while True:
         command, retries = manual_pending_commands.get()
         try:
-            pause_result = queue_command_and_wait(TELEMETRY_PAUSE_COMMAND, retries=COMMAND_MAX_RETRIES)
-            if DEBUG_ECU_TX and not pause_result.get("success", False):
-                print(f"[ECU_TX] telemetry pause failed: {pause_result}")
+            while command_in_flight.is_set():
+                time.sleep(0.005)
 
-            time.sleep(MANUAL_COMMAND_POST_TELEMETRY_GAP_S)
-            queue_command(command, retries=retries)
+            while (time.time() - last_rs485_poll_sent) < MANUAL_COMMAND_POST_POLL_GAP_S:
+                time.sleep(0.005)
+
+            result = queue_command_and_wait(command, retries=retries)
+            if DEBUG_ECU_TX and not result.get("success", False):
+                print(f"[ECU_TX] manual command failed after poll-gap wait: {result}")
         finally:
-            queue_command_and_wait(TELEMETRY_RESUME_COMMAND, retries=COMMAND_MAX_RETRIES)
             manual_command_pending_event.clear()
             manual_pending_commands.task_done()
 
@@ -374,6 +400,7 @@ def queue_command_and_wait(command: str, retries: int = COMMAND_MAX_RETRIES, tim
 def command_worker_loop():
     global pending_command_ack
     global pending_command_send_time
+    global last_rs485_poll_sent
 
     while True:
         item = command_queue.get()
@@ -391,6 +418,7 @@ def command_worker_loop():
 
         # Poll commands ({00,5}) don't need ACK verification, just send once
         if command == POLL_RS485_COMMAND:
+            last_rs485_poll_sent = time.time()
             send_command(command)
             success = True
             if DEBUG_ECU_TX:

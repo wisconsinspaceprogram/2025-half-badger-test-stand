@@ -1,9 +1,9 @@
-COM9,115200
-0,Not Connected,LOX Main
-1,LOX Tank Vent,LOX Venturi Iso
-2,LOX Fill,Not Connected
-3,LOX Fill Vent,Not Connected
-4,LOX Main,Not Connected
+COM4,9600
+0,Not Connected,Not Connected
+1,LOX Tank Vent,LOX Tank Vent
+2,LOX Fill,LOX Fill
+3,LOX Fill Vent,LOX Fill Vent
+4,LOX Main,LOX Main
 5,Not Connected,Not Connected
 6,Not Connected,Not Connected
 7,Not Connected,Not Connected

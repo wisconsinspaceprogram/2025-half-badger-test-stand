@@ -1,6 +1,21 @@
 #include <Servo.h>
 #include <Wire.h>
 
+#define LINK_SERIAL Serial1
+
+void debugLog(const char* message) {
+  Serial.println(message);
+}
+
+void debugLogCommand(const char* stage, int commandAddress, int commandInt) {
+  Serial.print("[ECU] ");
+  Serial.print(stage);
+  Serial.print(" addr=");
+  Serial.print(commandAddress);
+  Serial.print(" cmd=");
+  Serial.println(commandInt);
+}
+
 // uint8_t valveStates[12] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 // uint8_t valvePins[12] = { 13, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
 // bool valveIsCryo[12] = { true, true, true, true, true, true, true, true, true, true, true, false };
@@ -32,6 +47,7 @@ uint8_t rs485ValveDesiredStates[24] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 float lastValveStatePrint = 0.0;
 float lastPTTCPrint = 0.125; // Start 1/8 sec out of phase to avoid blowing up loop
+bool telemetryRequested = false;
 
 // Incoming messagse serial que
 char partialCommand[100] = "";
@@ -82,11 +98,203 @@ float tcHotValue[4] = {0.0, 0.0, 0.0, 0.0};
 float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
 uint8_t tcIds[4] = {4, 5, 6, 7};
 
+// ECU-side sequence commands
+#define ECU_CMD_TELEMETRY_PAUSE 40
+#define ECU_CMD_TELEMETRY_RESUME 41
+#define ECU_CMD_STOP_SEQUENCE 21
+#define ECU_CMD_UPLOAD_SEQUENCE_BEGIN 30
+#define ECU_CMD_UPLOAD_SEQUENCE_STEP 31
+#define ECU_CMD_UPLOAD_SEQUENCE_START 32
+
+// ECU-side sequence actions
+#define ECU_SEQUENCE_ACTION_OPEN 1
+#define ECU_SEQUENCE_ACTION_CLOSE 2
+#define ECU_SEQUENCE_ACTION_WAIT 3
+#define ECU_SEQUENCE_ACTION_FIRE 4
+#define ECU_SEQUENCE_ACTION_POLL 5
+
+#define ECU_UPLOADED_SEQUENCE_MAX_STEPS 160
+
+struct EcuSequenceStep {
+  uint8_t action;
+  uint8_t valveAddress;
+  uint16_t waitMs;
+};
+
+bool ecuSequenceRunning = false;
+int ecuSequenceStepIndex = 0;
+unsigned long ecuSequenceNextStepAtMs = 0;
+bool telemetryPaused = false;
+
+EcuSequenceStep ecuUploadedSequence[ECU_UPLOADED_SEQUENCE_MAX_STEPS];
+int ecuUploadedSequenceExpectedSteps = 0;
+int ecuUploadedSequenceCount = 0;
+bool ecuSequenceUploadInProgress = false;
+
+bool forwardRs485ValveCommand(int commandAddress, int valveCommand) {
+  if (commandAddress < 12 || commandAddress > 35) {
+    return false;
+  }
+
+  char buffer[10];
+  sprintf(buffer, "{%02d,%02d}", commandAddress, valveCommand);
+
+  if (valveCommand == 1) {
+    Serial.print("[ECU] forwarding open to RS485: ");
+  } else {
+    Serial.print("[ECU] forwarding close to RS485: ");
+  }
+  Serial.println(buffer);
+
+  Serial3.println(buffer);
+  rs485ValveDesiredStates[commandAddress - 12] = (valveCommand == 1) ? 1 : 0;
+  return true;
+}
+
+bool startUploadedSequence() {
+  if (ecuUploadedSequenceCount <= 0) {
+    Serial.println("[ECU] uploaded sequence empty");
+    return false;
+  }
+
+  ecuSequenceRunning = true;
+  ecuSequenceStepIndex = 0;
+  ecuSequenceNextStepAtMs = millis();
+
+  Serial.print("[ECU] uploaded sequence started steps=");
+  Serial.println(ecuUploadedSequenceCount);
+  return true;
+}
+
+bool beginUploadedSequence(int expectedSteps) {
+  if (expectedSteps <= 0 || expectedSteps > ECU_UPLOADED_SEQUENCE_MAX_STEPS) {
+    Serial.print("[ECU] invalid upload step count: ");
+    Serial.println(expectedSteps);
+    return false;
+  }
+
+  ecuSequenceUploadInProgress = true;
+  ecuUploadedSequenceExpectedSteps = expectedSteps;
+  ecuUploadedSequenceCount = 0;
+  stopEcuSequence();
+
+  Serial.print("[ECU] upload begin expected steps=");
+  Serial.println(expectedSteps);
+  return true;
+}
+
+bool addUploadedSequenceStep(uint8_t action, uint8_t target, uint16_t value) {
+  if (!ecuSequenceUploadInProgress) {
+    Serial.println("[ECU] upload step rejected (no upload in progress)");
+    return false;
+  }
+
+  if (ecuUploadedSequenceCount >= ecuUploadedSequenceExpectedSteps || ecuUploadedSequenceCount >= ECU_UPLOADED_SEQUENCE_MAX_STEPS) {
+    Serial.println("[ECU] upload step rejected (buffer full)");
+    return false;
+  }
+
+  ecuUploadedSequence[ecuUploadedSequenceCount].action = action;
+  ecuUploadedSequence[ecuUploadedSequenceCount].valveAddress = target;
+  ecuUploadedSequence[ecuUploadedSequenceCount].waitMs = value;
+  ecuUploadedSequenceCount += 1;
+  return true;
+}
+
+bool finalizeUploadedSequence() {
+  if (!ecuSequenceUploadInProgress) {
+    Serial.println("[ECU] upload finalize rejected (no upload in progress)");
+    return false;
+  }
+
+  ecuSequenceUploadInProgress = false;
+  if (ecuUploadedSequenceCount != ecuUploadedSequenceExpectedSteps) {
+    Serial.print("[ECU] upload finalize count mismatch count=");
+    Serial.print(ecuUploadedSequenceCount);
+    Serial.print(" expected=");
+    Serial.println(ecuUploadedSequenceExpectedSteps);
+    return false;
+  }
+
+  return true;
+}
+
+void stopEcuSequence() {
+  if (ecuSequenceRunning) {
+    Serial.println("[ECU] sequence stopped");
+  }
+
+  ecuSequenceRunning = false;
+  ecuSequenceStepIndex = 0;
+  ecuSequenceNextStepAtMs = 0;
+}
+
+void updateEcuSequence() {
+  if (!ecuSequenceRunning) {
+    return;
+  }
+
+  unsigned long nowMs = millis();
+  if ((long)(nowMs - ecuSequenceNextStepAtMs) < 0) {
+    return;
+  }
+
+  if (ecuSequenceStepIndex >= ecuUploadedSequenceCount) {
+    Serial.println("[ECU] sequence complete");
+    stopEcuSequence();
+    return;
+  }
+
+  const EcuSequenceStep& step = ecuUploadedSequence[ecuSequenceStepIndex];
+
+  if (step.action == ECU_SEQUENCE_ACTION_OPEN) {
+    forwardRs485ValveCommand(step.valveAddress, 1);
+    ecuSequenceNextStepAtMs = nowMs;
+  } else if (step.action == ECU_SEQUENCE_ACTION_CLOSE) {
+    forwardRs485ValveCommand(step.valveAddress, 2);
+    ecuSequenceNextStepAtMs = nowMs;
+  } else if (step.action == ECU_SEQUENCE_ACTION_WAIT) {
+    ecuSequenceNextStepAtMs = nowMs + step.waitMs;
+  } else if (step.action == ECU_SEQUENCE_ACTION_FIRE) {
+    int pyroIndex = step.valveAddress;
+    if (pyroIndex == 0) {
+      pyro1Start = nowMs / 1000.0;
+      pyro1 = 1;
+    } else if (pyroIndex == 1) {
+      pyro2Start = nowMs / 1000.0;
+      pyro2 = 1;
+    }
+    ecuSequenceNextStepAtMs = nowMs;
+  } else if (step.action == ECU_SEQUENCE_ACTION_POLL) {
+    updateRS485ValveAngles();
+    telemetryRequested = true;
+    ecuSequenceNextStepAtMs = nowMs;
+  } else {
+    ecuSequenceNextStepAtMs = nowMs;
+  }
+
+  ecuSequenceStepIndex += 1;
+}
+
+void sendAck(int commandAddress, int commandInt) {
+  debugLogCommand("sending ack", commandAddress, commandInt);
+  LINK_SERIAL.print("{7,");
+  LINK_SERIAL.print(commandAddress);
+  LINK_SERIAL.print(",");
+  LINK_SERIAL.print(commandInt);
+  LINK_SERIAL.println("}");
+}
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
+  LINK_SERIAL.begin(9600);
   Serial3.begin(115200);
   Serial3.setTimeout(10);
+  Wire.begin();
+  Wire.setWireTimeout(3000, true); // 3ms I2C timeout, reset bus on lockup
+
+  debugLog("[ECU] setup complete");
 
   pinMode(A4, INPUT);
 
@@ -134,8 +342,8 @@ void loop() {
   int commandAddress = 0;
   int commandEndIndex = 0;
 
-  while (Serial.available()) {
-    char nextChar = char(Serial.read());
+  while (LINK_SERIAL.available()) {
+    char nextChar = char(LINK_SERIAL.read());
     if (nextChar == '{') {
       partialCommand[0] = '{';
       partialCommandIndex = 1;
@@ -156,6 +364,9 @@ void loop() {
 
       commandInt = extractIntAfterNthComma(command, 0);
       commandAddress = extractIntAfterNthComma(command, -1);
+      Serial.print("[ECU] raw command: ");
+      Serial.println(command);
+      debugLogCommand("parsed", commandAddress, commandInt);
       // lastRecieveTime = t;
       partialCommandIndex = 0;
       break;
@@ -170,22 +381,14 @@ void loop() {
   }
 
   if (commandInt == 1) {
-    if (commandAddress >= 12) {
-      char buffer[10];
-      sprintf(buffer, "{%02d,01}", commandAddress);
-      Serial3.println(buffer);
-
-      rs485ValveDesiredStates[commandAddress - 12] = 1;
+    if (forwardRs485ValveCommand(commandAddress, 1)) {
+      sendAck(commandAddress, commandInt);
     }
   }
 
   if (commandInt == 2) {
-    if (commandAddress >= 12) {
-      char buffer[10];
-      sprintf(buffer, "{%02d,02}", commandAddress);
-      Serial3.println(buffer);
-
-      rs485ValveDesiredStates[commandAddress - 12] = 0;
+    if (forwardRs485ValveCommand(commandAddress, 2)) {
+      sendAck(commandAddress, commandInt);
     }
   }
 
@@ -200,6 +403,10 @@ void loop() {
       pyro2Start = t;
       pyro2 = 1;
     }
+
+    Serial.print("[ECU] pyro command accepted index=");
+    Serial.println(pyroIndex);
+    sendAck(commandAddress, commandInt);
   }
 
   if (commandInt == 4) {
@@ -213,8 +420,57 @@ void loop() {
   }
 
   if (commandInt == 5) {
-    updateRS485ValveAngles();
+    debugLog("[ECU] telemetry poll received");
+    if (!telemetryPaused) {
+      updateRS485ValveAngles();
+      telemetryRequested = true;
+    }
   }
+
+  if (commandInt == ECU_CMD_TELEMETRY_PAUSE) {
+    telemetryPaused = true;
+    telemetryRequested = false;
+    debugLog("[ECU] telemetry paused");
+    sendAck(commandAddress, commandInt);
+  }
+
+  if (commandInt == ECU_CMD_TELEMETRY_RESUME) {
+    telemetryPaused = false;
+    debugLog("[ECU] telemetry resumed");
+    sendAck(commandAddress, commandInt);
+  }
+
+  if (commandInt == ECU_CMD_STOP_SEQUENCE) {
+    stopEcuSequence();
+    sendAck(commandAddress, commandInt);
+  }
+
+  if (commandInt == ECU_CMD_UPLOAD_SEQUENCE_BEGIN) {
+    int expectedSteps = extractIntAfterNthComma(command, 1);
+    if (beginUploadedSequence(expectedSteps)) {
+      sendAck(commandAddress, commandInt);
+    }
+  }
+
+  if (commandInt == ECU_CMD_UPLOAD_SEQUENCE_STEP) {
+    int action = extractIntAfterNthComma(command, 1);
+    int target = extractIntAfterNthComma(command, 2);
+    int value = extractIntAfterNthComma(command, 3);
+
+    if (action >= 0 && target >= 0 && value >= 0) {
+      if (addUploadedSequenceStep((uint8_t)action, (uint8_t)target, (uint16_t)value)) {
+        sendAck(commandAddress, commandInt);
+      }
+    }
+  }
+
+  if (commandInt == ECU_CMD_UPLOAD_SEQUENCE_START) {
+    if (finalizeUploadedSequence() && startUploadedSequence()) {
+      sendAck(commandAddress, commandInt);
+    }
+  }
+
+  updateEcuSequence();
 
   // Processign pyro channels
   // Disabling if they've been on for more than 1s
@@ -294,39 +550,36 @@ void loop() {
 
   // Serial.println("{1,0,1,1,2,3,4}");
   // Serial.println("Line");
-  if ((t - lastValveStatePrint) > 0.25) {
+  if (telemetryRequested) {
+    debugLog("[ECU] sending telemetry block");
     printDesiredValveStates();
     printActualValveStates();
-    Serial.print("{3,");
-    Serial.print(batteryVoltage);
-    Serial.println("}");
+    LINK_SERIAL.print("{3,");
+    LINK_SERIAL.print(batteryVoltage);
+    LINK_SERIAL.println("}");
     printRS485ValvePercentages();
-
     lastValveStatePrint = t;
-  }
 
-  digitalWrite(46, (rs485ValveAngles[0] <= 30 || rs485ValveAngles[0] > 80) ? 1 : 0);
+    // Read sensors only when the app asks for telemetry.
+    for (int i = 0; i < (sizeof(ptPins) / sizeof(ptPins[0])); i++)
+    {
+      ptValue[i] = (analogRead(ptPins[i]) / 1023.0 * 5.0 - ptOutputRange[i][0]) / (ptOutputRange[i][1] - ptOutputRange[i][0]) * (ptPressureRange[i][1] - ptPressureRange[i][0]) + ptPressureRange[i][0];
+    }
 
-  // Read sensors
-  // PT Read
-  for (int i = 0; i < (sizeof(ptPins) / sizeof(ptPins[0])); i++)
-  {
-    ptValue[i] = (analogRead(ptPins[i]) / 1023.0 * 5.0 - ptOutputRange[i][0]) / (ptOutputRange[i][1] - ptOutputRange[i][0]) * (ptPressureRange[i][1] - ptPressureRange[i][0]) + ptPressureRange[i][0];
-  }
+    for (int i = 0; i < (sizeof(tcAddress) / sizeof(tcAddress[0])); i++)
+    {
+      tcHotValue[i] = readTempRegister(tcAddress[i], REG_HOT_JUNCTION_TEMP);
+      tcColdValue[i] = readTempRegister(tcAddress[i], REG_COLD_JUNCTION_TEMP);
+    }
 
-  // TC Read
-  for (int i = 0; i < (sizeof(tcAddress) / sizeof(tcAddress[0])); i++)
-  {
-    tcHotValue[i] = readTempRegister(tcAddress[i], REG_HOT_JUNCTION_TEMP);
-    tcColdValue[i] = readTempRegister(tcAddress[i], REG_COLD_JUNCTION_TEMP);
-  }
-
-  // Print PT and TC values if needed
-  if ((t - lastPTTCPrint) > 0.5) {
     lastPTTCPrint = t;
     printPTReadings();
     printTCReadings();
+    telemetryRequested = false;
+    debugLog("[ECU] telemetry block complete");
   }
+
+  digitalWrite(46, (rs485ValveAngles[0] <= 30 || rs485ValveAngles[0] > 80) ? 1 : 0);
 }
 
 
@@ -441,61 +694,61 @@ void updateRS485ValveAngles() {
 // }
 
 void printDesiredValveStates() {
-  Serial.print("{1");
+  LINK_SERIAL.print("{1");
   for (int i = 0; i < 12; i++) {
-    Serial.print(",");
-    Serial.print(rs485ValveDesiredStates[i]);
+    LINK_SERIAL.print(",");
+    LINK_SERIAL.print(rs485ValveDesiredStates[i]);
   }
-  Serial.println("}");
+  LINK_SERIAL.println("}");
 }
 
 void printActualValveStates() {
-  Serial.print("{2");
+  LINK_SERIAL.print("{2");
   for (int i = 0; i < 24; i++) {
-    Serial.print(",");
+    LINK_SERIAL.print(",");
     uint8_t angle = rs485ValveAngles[i];
     if (angle > 30 && angle < 80) {
-      Serial.print("0");  // Closed
+      LINK_SERIAL.print("0");  // Closed
     } else {
-      Serial.print("1");  // Open
+      LINK_SERIAL.print("1");  // Open
     }
   }
-  Serial.println("}");
+  LINK_SERIAL.println("}");
 }
 
 
 void printRS485ValvePercentages() {
-  Serial.print("{4");
+  LINK_SERIAL.print("{4");
   for (int i = 0; i < 24; i++) {
-    Serial.print(",");
+    LINK_SERIAL.print(",");
     uint8_t angle = rs485ValveAngles[i]; //raw angle received
     int percent = angle - 50;   // convert raw angle to percent 
-    Serial.print(percent);      //Removed constrain to see if any weird values occur
+    LINK_SERIAL.print(percent);      //Removed constrain to see if any weird values occur
   }
 
-  Serial.println("}");
+  LINK_SERIAL.println("}");
 }
 
 void printPTReadings() {
-  Serial.print("{5");
+  LINK_SERIAL.print("{5");
   // Support adding more PTs without changing code
   for (int i = 0; i < sizeof(ptPins)/sizeof(ptPins[0]); i++) {
-    Serial.print(",");
-    Serial.print(ptValue[i]);
+    LINK_SERIAL.print(",");
+    LINK_SERIAL.print(ptValue[i]);
   }
-  Serial.println("}");
+  LINK_SERIAL.println("}");
 }
 
 void printTCReadings() {
-  Serial.print("{6");
+  LINK_SERIAL.print("{6");
   // Support adding more PTs without changing code
   for (int i = 0; i < sizeof(tcAddress)/sizeof(tcAddress); i++) {
-    Serial.print(",");
-    Serial.print(tcHotValue[i]);
-    Serial.print(",");
-    Serial.print(tcColdValue[i]);
+    LINK_SERIAL.print(",");
+    LINK_SERIAL.print(tcHotValue[i]);
+    LINK_SERIAL.print(",");
+    LINK_SERIAL.print(tcColdValue[i]);
   }
-  Serial.println("}");
+  LINK_SERIAL.println("}");
 }
 
 
@@ -633,9 +886,14 @@ float readTempRegister(uint8_t addr, uint8_t reg)
 {
   Wire.beginTransmission(addr);
   Wire.write(reg);
-  Wire.endTransmission();
+  byte err = Wire.endTransmission();
+  if (err != 0) return NAN; // No device at address
 
   Wire.requestFrom(addr, (uint8_t)2);
+  if (Wire.getWireTimeoutFlag()) {
+    Wire.clearWireTimeoutFlag();
+    return NAN; // I2C bus locked up
+  }
   if (Wire.available() < 2)
   {
     return NAN; // Return NaN if no response

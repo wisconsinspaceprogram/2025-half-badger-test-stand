@@ -25,6 +25,7 @@ STOP_ECU_SEQUENCE_COMMAND = "{0,21}"
 UPLOAD_ECU_SEQUENCE_BEGIN_COMMAND_PREFIX = "{0,30,"
 UPLOAD_ECU_SEQUENCE_STEP_COMMAND_PREFIX = "{0,31,"
 UPLOAD_ECU_SEQUENCE_START_COMMAND = "{0,32}"
+START_ECU_HARDCODED_LAUNCH_COMMAND = "{0,33}"
 ACK_COMMAND_PREFIX = "{7,"
 COMMAND_ACK_TIMEOUT_S = 0.35
 COMMAND_MAX_RETRIES = 5
@@ -251,6 +252,14 @@ def upload_sequence_and_start_blocking(steps, retries: int = COMMAND_MAX_RETRIES
         "last_step": upload_result.get("last_step"),
         "start": start_result.get("start"),
     }
+
+
+def start_hardcoded_launch_sequence_blocking(retries: int = COMMAND_MAX_RETRIES):
+    print(f"[SEQUENCE] Sending hardcoded launch start cmd: {START_ECU_HARDCODED_LAUNCH_COMMAND}")
+    result = queue_command_and_wait(START_ECU_HARDCODED_LAUNCH_COMMAND, retries=retries)
+    if not result.get("success", False):
+        result["stage"] = "start_hardcoded"
+    return result
 
 
 def stop_ecu_sequence():

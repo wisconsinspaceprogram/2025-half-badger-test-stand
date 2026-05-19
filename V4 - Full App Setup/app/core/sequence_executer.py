@@ -9,6 +9,7 @@ active_sequence_step = -1
 next_step_time = 0
 pending_sequence_mode = ""
 uploaded_sequence_index = -1
+HARDCODED_SEQUENCE_SENTINEL = -2
 
 
 def update_sequence_steps(new_sequnces):
@@ -27,6 +28,10 @@ def get_sequences():
 
 def get_names():
     return sequence_names
+
+
+def is_sequence_uploaded(sequence_index: int):
+    return uploaded_sequence_index == sequence_index
 
 
 def _queue_sequence_request(sequence_index: int, mode: str):
@@ -61,6 +66,10 @@ def start_uploaded_sequence(sequence_index: int):
         return False
 
     return _queue_sequence_request(sequence_index, "start_only")
+
+
+def start_hardcoded_launch_sequence():
+    return _queue_sequence_request(HARDCODED_SEQUENCE_SENTINEL, "start_hardcoded")
 
 
 def cancel_sequence():
@@ -149,7 +158,7 @@ def start_sequence_runner():
     while main_thread.is_alive():
         if active_sequence_index != -1:
             try:
-                if active_sequence_index >= len(sequences):
+                if active_sequence_index >= len(sequences) and pending_sequence_mode != "start_hardcoded":
                     raise ValueError(f"Invalid active sequence index: {active_sequence_index}")
 
                 request_mode = pending_sequence_mode or "upload_and_start"
@@ -184,6 +193,13 @@ def start_sequence_runner():
                             print(f"[SEQUENCE] ECU start failed: {start_result}")
                         else:
                             print("[SEQUENCE] ECU sequence started; resuming polling immediately.")
+
+                elif request_mode == "start_hardcoded":
+                    start_result = ECU_Poller.start_hardcoded_launch_sequence_blocking()
+                    if not start_result.get("success", False):
+                        print(f"[SEQUENCE] ECU hardcoded launch start failed: {start_result}")
+                    else:
+                        print("[SEQUENCE] ECU hardcoded launch sequence started; resuming polling immediately.")
 
             except Exception as e:
                 print(f"[SEQUENCE] Failed to process sequence request: {e}")

@@ -103,6 +103,7 @@ uint8_t tcIds[4] = {4, 5, 6, 7};
 #define ECU_CMD_UPLOAD_SEQUENCE_BEGIN 30
 #define ECU_CMD_UPLOAD_SEQUENCE_STEP 31
 #define ECU_CMD_UPLOAD_SEQUENCE_START 32
+#define ECU_CMD_START_HARDCODED_LAUNCH 33
 
 // ECU-side sequence actions
 #define ECU_SEQUENCE_ACTION_OPEN 1
@@ -122,11 +123,28 @@ struct EcuSequenceStep {
 bool ecuSequenceRunning = false;
 int ecuSequenceStepIndex = 0;
 unsigned long ecuSequenceNextStepAtMs = 0;
+const EcuSequenceStep* ecuActiveSequence = nullptr;
+int ecuActiveSequenceCount = 0;
+bool ecuActiveSequenceIsHardcoded = false;
 
 EcuSequenceStep ecuUploadedSequence[ECU_UPLOADED_SEQUENCE_MAX_STEPS];
 int ecuUploadedSequenceExpectedSteps = 0;
 int ecuUploadedSequenceCount = 0;
 bool ecuSequenceUploadInProgress = false;
+
+// ECU-side hardcoded launch sequence.
+// Update these steps in firmware when launch choreography changes.
+const EcuSequenceStep ecuHardcodedLaunchSequence[] = {
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 500 },
+  { ECU_SEQUENCE_ACTION_OPEN, 16, 0 },
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
+  { ECU_SEQUENCE_ACTION_CLOSE, 16, 0 },
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
+  { ECU_SEQUENCE_ACTION_OPEN, 16, 0 },
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
+  { ECU_SEQUENCE_ACTION_CLOSE, 16, 0 },
+};
+const int ecuHardcodedLaunchSequenceCount = sizeof(ecuHardcodedLaunchSequence) / sizeof(ecuHardcodedLaunchSequence[0]);
 
 bool forwardRs485ValveCommand(int commandAddress, int valveCommand) {
   if (commandAddress < 12 || commandAddress > 35) {
@@ -154,12 +172,35 @@ bool startUploadedSequence() {
     return false;
   }
 
+  ecuActiveSequence = ecuUploadedSequence;
+  ecuActiveSequenceCount = ecuUploadedSequenceCount;
+  ecuActiveSequenceIsHardcoded = false;
   ecuSequenceRunning = true;
   ecuSequenceStepIndex = 0;
   ecuSequenceNextStepAtMs = millis();
 
   Serial.print("[ECU] uploaded sequence started steps=");
   Serial.println(ecuUploadedSequenceCount);
+  return true;
+}
+
+bool startHardcodedLaunchSequence() {
+  if (ecuHardcodedLaunchSequenceCount <= 0) {
+    Serial.println("[ECU] hardcoded launch sequence empty");
+    return false;
+  }
+
+  stopEcuSequence();
+  ecuSequenceUploadInProgress = false;
+  ecuActiveSequence = ecuHardcodedLaunchSequence;
+  ecuActiveSequenceCount = ecuHardcodedLaunchSequenceCount;
+  ecuActiveSequenceIsHardcoded = true;
+  ecuSequenceRunning = true;
+  ecuSequenceStepIndex = 0;
+  ecuSequenceNextStepAtMs = millis();
+
+  Serial.print("[ECU] hardcoded launch sequence started steps=");
+  Serial.println(ecuHardcodedLaunchSequenceCount);
   return true;
 }
 
@@ -251,6 +292,9 @@ void stopEcuSequence() {
   ecuSequenceRunning = false;
   ecuSequenceStepIndex = 0;
   ecuSequenceNextStepAtMs = 0;
+  ecuActiveSequence = nullptr;
+  ecuActiveSequenceCount = 0;
+  ecuActiveSequenceIsHardcoded = false;
 }
 
 void updateEcuSequence() {
@@ -263,16 +307,18 @@ void updateEcuSequence() {
     return;
   }
 
-  if (ecuSequenceStepIndex >= ecuUploadedSequenceCount) {
+  if (ecuActiveSequence == nullptr || ecuSequenceStepIndex >= ecuActiveSequenceCount) {
     Serial.print("[ECU] sequence complete: executed ");
     Serial.print(ecuSequenceStepIndex);
     Serial.print(" of ");
-    Serial.println(ecuUploadedSequenceCount);
+    Serial.print(ecuActiveSequenceCount);
+    Serial.print(" source=");
+    Serial.println(ecuActiveSequenceIsHardcoded ? "hardcoded" : "uploaded");
     stopEcuSequence();
     return;
   }
 
-  const EcuSequenceStep& step = ecuUploadedSequence[ecuSequenceStepIndex];
+  const EcuSequenceStep& step = ecuActiveSequence[ecuSequenceStepIndex];
   
   Serial.print("[ECU SEQ] step ");
   Serial.print(ecuSequenceStepIndex);
@@ -500,6 +546,12 @@ void loop() {
 
   if (commandInt == ECU_CMD_UPLOAD_SEQUENCE_START) {
     if (finalizeUploadedSequence() && startUploadedSequence()) {
+      sendAck(commandAddress, commandInt);
+    }
+  }
+
+  if (commandInt == ECU_CMD_START_HARDCODED_LAUNCH) {
+    if (startHardcodedLaunchSequence()) {
       sendAck(commandAddress, commandInt);
     }
   }

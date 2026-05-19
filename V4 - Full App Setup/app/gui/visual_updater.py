@@ -389,7 +389,16 @@ def update_thread():
                 dpg.set_value("main_tab_ecu_recieved_commands", recieved_command_string)
 
                 # ECU Run Sequences
-                dpg.configure_item("main_tab_sequence_select", items=sequence_executer.get_names())
+                sequence_names = sequence_executer.get_names()
+                dpg.configure_item("main_tab_sequence_select", items=sequence_names)
+
+                selected_sequence = dpg.get_value("main_tab_sequence_select")
+                start_enabled = False
+                if selected_sequence in sequence_names:
+                    selected_index = sequence_names.index(selected_sequence)
+                    start_enabled = sequence_executer.is_sequence_uploaded(selected_index)
+
+                dpg.configure_item("main_tab_sequence_start_button", enabled=start_enabled)
                 dpg.set_value(
                     "main_tab_step_number",
                     f"{sequence_executer.get_sequence_step()}/{sequence_executer.get_sequence_length()}",

@@ -276,7 +276,7 @@ def build():
             # dpg.add_text(default_value="7.7", pos=(150, 475), color=(255, 100, 100, 255))
 
         with dpg.group(pos=(900, 815)):
-            dpg.add_button(label="Execute Launch Sequence", callback=callback_start_hardcoded_launch_sequence)
+            dpg.add_button(label="Execute Launch Sequence", callback=callback_start_hardcoded_launch_sequence) # button for hardcoded sequence
             dpg.add_text("Run Uploaded Sequence:")
             dpg.add_combo(["x", "s"], width=250, tag="main_tab_sequence_select")
             with dpg.group(horizontal=True):

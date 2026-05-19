@@ -1,6 +1,7 @@
 #include <Servo.h>
 #include <Wire.h>
 
+// set LINK_SERIAL to "Serial1" for RX/TX pins, "Serial" for USB
 #define LINK_SERIAL Serial1
 
 void debugLog(const char* message) {
@@ -98,14 +99,14 @@ float tcHotValue[4] = {0.0, 0.0, 0.0, 0.0};
 float tcColdValue[4] = {0.0, 0.0, 0.0, 0.0};
 uint8_t tcIds[4] = {4, 5, 6, 7};
 
-// ECU-side sequence commands
+// Sequence commands for sequence execution
 #define ECU_CMD_STOP_SEQUENCE 21
 #define ECU_CMD_UPLOAD_SEQUENCE_BEGIN 30
 #define ECU_CMD_UPLOAD_SEQUENCE_STEP 31
 #define ECU_CMD_UPLOAD_SEQUENCE_START 32
 #define ECU_CMD_START_HARDCODED_LAUNCH 33
 
-// ECU-side sequence actions
+// Sequence actions to send to valves, pyro, etc
 #define ECU_SEQUENCE_ACTION_OPEN 1
 #define ECU_SEQUENCE_ACTION_CLOSE 2
 #define ECU_SEQUENCE_ACTION_WAIT 3
@@ -132,8 +133,8 @@ int ecuUploadedSequenceExpectedSteps = 0;
 int ecuUploadedSequenceCount = 0;
 bool ecuSequenceUploadInProgress = false;
 
-// ECU-side hardcoded launch sequence.
-// Update these steps in firmware when launch choreography changes.
+// ECU hardcoded launch sequence.
+// NEED TO UPDATES THIS BEFORE WE LAUNCH.
 const EcuSequenceStep ecuHardcodedLaunchSequence[] = {
   { ECU_SEQUENCE_ACTION_WAIT, 0, 500 },
   { ECU_SEQUENCE_ACTION_OPEN, 16, 0 },
@@ -330,13 +331,9 @@ void updateEcuSequence() {
   Serial.println(step.waitMs);
 
   if (step.action == ECU_SEQUENCE_ACTION_OPEN) {
-    Serial.print("[ECU SEQ] OPEN valve addr=");
-    Serial.println(step.valveAddress);
     forwardRs485ValveCommand(step.valveAddress, 1);
     ecuSequenceNextStepAtMs = nowMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_CLOSE) {
-    Serial.print("[ECU SEQ] CLOSE valve addr=");
-    Serial.println(step.valveAddress);
     forwardRs485ValveCommand(step.valveAddress, 2);
     ecuSequenceNextStepAtMs = nowMs;
   } else if (step.action == ECU_SEQUENCE_ACTION_WAIT) {
@@ -371,7 +368,6 @@ void updateEcuSequence() {
 }
 
 void sendAck(int commandAddress, int commandInt) {
-  debugLogCommand("sending ack", commandAddress, commandInt);
   LINK_SERIAL.print("{7,");
   LINK_SERIAL.print(commandAddress);
   LINK_SERIAL.print(",");
@@ -458,9 +454,9 @@ void loop() {
 
       commandInt = extractIntAfterNthComma(command, 0);
       commandAddress = extractIntAfterNthComma(command, -1);
-      Serial.print("[ECU] raw command: ");
-      Serial.println(command);
-      debugLogCommand("parsed", commandAddress, commandInt);
+      // Serial.print("[ECU] raw command: ");
+      // Serial.println(command);
+      // debugLogCommand("parsed", commandAddress, commandInt);
       // lastRecieveTime = t;
       partialCommandIndex = 0;
       break;
@@ -514,7 +510,6 @@ void loop() {
   }
 
   if (commandInt == 5) {
-    debugLog("[ECU] telemetry poll received");
     updateRS485ValveAngles();
     telemetryRequested = true;
   }

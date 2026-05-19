@@ -17,8 +17,6 @@ ecu_command_sent_list = []
 ecu_command_sent_list_times = []
 ecu_char_read_buffer = ""
 
-DEBUG_ECU_RX = True
-DEBUG_ECU_TX = True
 
 POLL_RS485_COMMAND = "{00,5}"
 STOP_ECU_SEQUENCE_COMMAND = "{0,21}"
@@ -27,20 +25,16 @@ UPLOAD_ECU_SEQUENCE_STEP_COMMAND_PREFIX = "{0,31,"
 UPLOAD_ECU_SEQUENCE_START_COMMAND = "{0,32}"
 START_ECU_HARDCODED_LAUNCH_COMMAND = "{0,33}"
 ACK_COMMAND_PREFIX = "{7,"
-COMMAND_ACK_TIMEOUT_S = 0.35
-COMMAND_MAX_RETRIES = 5
-ACK_LATENCY_HISTORY_SIZE = 200
-MANUAL_COMMAND_POST_POLL_GAP_S = 1.0
+COMMAND_ACK_TIMEOUT_S = 0.35  # time to wait for an ACK before considering the command failed and retrying
+COMMAND_MAX_RETRIES = 5 # max number of times to retry a command before giving up and reporting failure
+MANUAL_COMMAND_POST_POLL_GAP_S = 1.0 # after a poll command is sent, wait time to clear the line before sending command
 
 command_queue = queue.Queue()
 command_ack_event = threading.Event()
 pending_command_ack = None
-pending_command_send_time = None
 command_worker_started = False
 command_worker_lock = threading.Lock()
-send_lock = threading.Lock()
 command_in_flight = threading.Event()
-ack_latency_samples_ms = deque(maxlen=ACK_LATENCY_HISTORY_SIZE)
 
 # 0 => closed, 1 => open
 ecu_valve_desired_states = [0] * 36
@@ -79,6 +73,7 @@ telemetry_frame_seen = {
     6: False,
 }
 
+        # Master-side telemetry poll: send once and do not wait for an ACK because it doesnt really matter if it gets through every time
 
 def update_log_names():
     global rx_file_name
@@ -236,24 +231,6 @@ def start_uploaded_sequence_blocking(retries: int = COMMAND_MAX_RETRIES):
     }
 
 
-def upload_sequence_and_start_blocking(steps, retries: int = COMMAND_MAX_RETRIES):
-    upload_result = upload_sequence_blocking(steps, retries=retries)
-    if not upload_result.get("success", False):
-        return upload_result
-
-    start_result = start_uploaded_sequence_blocking(retries=retries)
-    if not start_result.get("success", False):
-        return start_result
-
-    return {
-        "success": True,
-        "steps_uploaded": len(steps),
-        "begin": upload_result.get("begin"),
-        "last_step": upload_result.get("last_step"),
-        "start": start_result.get("start"),
-    }
-
-
 def start_hardcoded_launch_sequence_blocking(retries: int = COMMAND_MAX_RETRIES):
     print(f"[SEQUENCE] Sending hardcoded launch start cmd: {START_ECU_HARDCODED_LAUNCH_COMMAND}")
     result = queue_command_and_wait(START_ECU_HARDCODED_LAUNCH_COMMAND, retries=retries)
@@ -320,8 +297,6 @@ def clear_pending_poll_commands():
             if command_queue.unfinished_tasks == 0:
                 command_queue.all_tasks_done.notify_all()
 
-    if cleared > 0 and DEBUG_ECU_TX:
-        print(f"[ECU_TX] cleared {cleared} queued poll command(s) before manual send")
 
 
 def reset_telemetry_block_tracking():
@@ -334,8 +309,6 @@ def mark_telemetry_frame(frame_id: int):
         telemetry_frame_seen[frame_id] = True
 
     if all(telemetry_frame_seen.values()):
-        if DEBUG_ECU_RX:
-            print("[ECU_RX] telemetry block complete")
         reset_telemetry_block_tracking()
 
 
@@ -373,8 +346,6 @@ def _manual_pending_worker_loop():
                 time.sleep(0.005)
 
             result = queue_command_and_wait(command, retries=retries)
-            if DEBUG_ECU_TX and not result.get("success", False):
-                print(f"[ECU_TX] manual command failed after poll-gap wait: {result}")
         finally:
             manual_command_pending_event.clear()
             manual_pending_commands.task_done()
@@ -408,7 +379,6 @@ def queue_command_and_wait(command: str, retries: int = COMMAND_MAX_RETRIES, tim
 
 def command_worker_loop():
     global pending_command_ack
-    global pending_command_send_time
     global last_rs485_poll_sent
 
     while True:
@@ -425,13 +395,11 @@ def command_worker_loop():
         success = False
         parsed = parse_command_fields(command)
 
-        # Poll commands ({00,5}) don't need ACK verification, just send once
+        # Poll commands ({00,5}) don't get ACK verification
         if command == POLL_RS485_COMMAND:
             last_rs485_poll_sent = time.time()
             send_command(command)
             success = True
-            if DEBUG_ECU_TX:
-                print(f"[ECU_TX poll] sent")
             if completion_result is not None:
                 completion_result["success"] = success
                 completion_result["attempts"] = attempts
@@ -442,6 +410,7 @@ def command_worker_loop():
             command_queue.task_done()
             continue
 
+        # Non-ACK commands 
         if parsed is None:
             send_command(command)
             success = True
@@ -455,15 +424,14 @@ def command_worker_loop():
             command_queue.task_done()
             continue
 
+    # ACK-tracked commands: send, then block until the ECU confirms the same address/command pair.
         pending_command_ack = parsed
-        pending_command_send_time = None
         command_ack_event.clear()
         command_in_flight.set()
 
         try:
             for _ in range(retries):
                 attempts += 1
-                pending_command_send_time = time.perf_counter()
                 send_command(command)
                 if command_ack_event.wait(COMMAND_ACK_TIMEOUT_S):
                     success = True
@@ -472,7 +440,6 @@ def command_worker_loop():
                 print(f"Command ack timeout: {command}")
         finally:
             pending_command_ack = None
-            pending_command_send_time = None
             command_ack_event.clear()
             command_in_flight.clear()
             if completion_result is not None:
@@ -537,15 +504,7 @@ def start_ecu_communication():
                     data = ecu_serial.read(256)
                     
                     if data:
-                        if DEBUG_ECU_RX:
-                            print(f"[ECU_RX raw] {data!r}")
                         ecu_char_read_buffer += data.decode("utf-8", errors="ignore")
-
-                        if DEBUG_ECU_RX:
-                            print(f"[ECU_RX buffer] {ecu_char_read_buffer!r}")
-
-                        # if data.startswith("{"):
-                        #    ecu_char_read_buffer = ""jksdf;jkdsfljkdsf;j;ldlh;hi
 
                         while "{" in ecu_char_read_buffer and "}" in ecu_char_read_buffer:
                             start = ecu_char_read_buffer.find("{")
@@ -553,8 +512,6 @@ def start_ecu_communication():
                             if end != -1 and end > start:
                                 command = ecu_char_read_buffer[start : end + 1]  # Include the {} in the command
                                 ecu_char_read_buffer = ecu_char_read_buffer[end + 1 :]
-                                if DEBUG_ECU_RX:
-                                    print(f"[ECU_RX frame] {command}")
                                 process_command(command)
                             else:
                                 break
@@ -596,22 +553,20 @@ def process_command(command: str):
     global ecu_valve_actual_states
     global ecu_battery_voltage
     global pending_command_ack
-    global pending_command_send_time
 
     ecu_command_read_buffer.append(command)
     now = datetime.now()
     command_recieved_time = now.strftime("%H:%M:") + f"{now.second}.{now.microsecond // 10000:02d}"
     ecu_command_read_buffer_times.append(command_recieved_time)
 
-    if DEBUG_ECU_RX:
-        print(f"[ECU_RX parsed] {command_recieved_time} {command}")
-
     with rx_file_lock:
         with open(rx_file_name, "a") as f:
             f.write(f"{command_recieved_time},{command}\n")
 
     if command.startswith(ACK_COMMAND_PREFIX) and command.endswith("}"):
-        # ACK format is {7,address,command} — extract fields 1 and 2
+        # ACKs are matched against the exact command currently in transmission
+        # prevents a late ACK from being mistaken for the next command
+        # ACK format: {7,address,command} 
         try:
             parts = command[1:-1].split(",")  # strips { and }
             ack_addr = int(parts[1])
@@ -620,17 +575,7 @@ def process_command(command: str):
         except (IndexError, ValueError):
             parsed = None
         if parsed is not None and pending_command_ack == parsed:
-            latency_ms = None
-            if pending_command_send_time is not None:
-                latency_ms = (time.perf_counter() - pending_command_send_time) * 1000.0
-                ack_latency_samples_ms.append(latency_ms)
-            if DEBUG_ECU_RX:
-                print(f"[ECU_RX ack matched] {parsed}")
-                if latency_ms is not None:
-                    print(f"[ECU_RX ack latency] {latency_ms:.1f} ms ({get_ack_latency_stats_string()})")
             command_ack_event.set()
-        elif DEBUG_ECU_RX:
-            print(f"[ECU_RX ack ignored] pending={pending_command_ack} parsed={parsed}")
         return
 
     # Desired valve state info from ECU (12 RS485 valves, addresses 12-23)
@@ -642,8 +587,6 @@ def process_command(command: str):
                 ecu_valve_desired_states[i_state + 12] = int(info[i_state])
             except:
                 ecu_valve_desired_states[i_state + 12] = 0
-        if DEBUG_ECU_RX:
-            print(f"[ECU_RX desired valve state] {len(info)} values")
         mark_telemetry_frame(1)
 
     # Actual valve state info from ECU (24 RS485 valves, addresses 12-35)
@@ -655,8 +598,6 @@ def process_command(command: str):
                 ecu_valve_actual_states[i_state + 12] = int(info[i_state])
             except:
                 ecu_valve_actual_states[i_state + 12] = 0
-        if DEBUG_ECU_RX:
-            print(f"[ECU_RX actual valve state] {len(info)} values")
         mark_telemetry_frame(2)
 
     if command.startswith("{4,") and command.endswith("}"):
@@ -666,15 +607,11 @@ def process_command(command: str):
                 ecu_rs485_valve_percentages[i] = int(info[i])  # stores parsed values
             except:
                 ecu_rs485_valve_percentages[i] = 0
-        if DEBUG_ECU_RX:
-            print(f"[ECU_RX rs485 percentage frame received] {len(info)} values")
         mark_telemetry_frame(4)
 
     if command.startswith("{3,") and command.endswith("}"):
         try:
             ecu_battery_voltage = float(command[3:-1])
-            if DEBUG_ECU_RX:
-                print(f"[ECU_RX battery] {ecu_battery_voltage}")
             mark_telemetry_frame(3)
         except ValueError:
             pass
@@ -697,8 +634,6 @@ def send_command(command: str):
     if ecu_connected:
         try:
             out_string = command + "\r\n"
-            if DEBUG_ECU_TX:
-                print(f"[ECU_TX] sending {out_string!r}")
             ecu_serial.write(out_string.encode())
             ecu_consecutive_write_failures = 0
 
@@ -717,8 +652,6 @@ def send_command(command: str):
                     f.write(f"{command_recieved_time},{command}\n")
         except Exception as e:
             ecu_consecutive_write_failures += 1
-            if DEBUG_ECU_TX:
-                print(f"[ECU_TX] write failed for {command} ({ecu_consecutive_write_failures}): {e}")
             if ecu_consecutive_write_failures >= 3:
                 ecu_connected = False
                 ecu_consecutive_write_failures = 0
@@ -757,46 +690,6 @@ def get_desired_valve_states():
 
 def get_actual_valve_states():
     return ecu_valve_actual_states
-
-
-def get_ack_latency_stats():
-    samples = list(ack_latency_samples_ms)
-    if len(samples) == 0:
-        return {
-            "count": 0,
-            "mean_ms": 0.0,
-            "p50_ms": 0.0,
-            "p95_ms": 0.0,
-            "min_ms": 0.0,
-            "max_ms": 0.0,
-        }
-
-    sorted_samples = sorted(samples)
-    count = len(sorted_samples)
-    p50_index = int(round((count - 1) * 0.50))
-    p95_index = int(round((count - 1) * 0.95))
-
-    return {
-        "count": count,
-        "mean_ms": sum(sorted_samples) / count,
-        "p50_ms": sorted_samples[p50_index],
-        "p95_ms": sorted_samples[p95_index],
-        "min_ms": sorted_samples[0],
-        "max_ms": sorted_samples[-1],
-    }
-
-
-def get_ack_latency_stats_string():
-    stats = get_ack_latency_stats()
-    if stats["count"] == 0:
-        return "n=0"
-
-    return (
-        f"n={stats['count']} "
-        f"avg={stats['mean_ms']:.1f}ms "
-        f"p50={stats['p50_ms']:.1f}ms "
-        f"p95={stats['p95_ms']:.1f}ms"
-    )
 
 
 def get_battery_voltage():

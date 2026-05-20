@@ -7,7 +7,7 @@ import serial
 from datetime import datetime
 
 ecu_port = "COM4"
-ecu_baud = 9600
+ecu_baud = 115200
 ecu_serial = None
 ecu_connected = False
 
@@ -28,6 +28,7 @@ ACK_COMMAND_PREFIX = "{7,"
 COMMAND_ACK_TIMEOUT_S = 0.35  # time to wait for an ACK before considering the command failed and retrying
 COMMAND_MAX_RETRIES = 5 # max number of times to retry a command before giving up and reporting failure
 MANUAL_COMMAND_POST_POLL_GAP_S = 1.0 # after a poll command is sent, wait time to clear the line before sending command
+TELEMETRY_BLOCK_TIMEOUT_S = 2.0 # max time to wait for a full telemetry block before allowing another poll
 
 command_queue = queue.Queue()
 command_ack_event = threading.Event()
@@ -57,6 +58,8 @@ tx_file_name = ""
 rs485_poll_enabled = True
 last_rs485_poll = time.time()
 last_rs485_poll_sent = 0.0
+last_poll_request_sent = 0.0
+awaiting_telemetry_block = False
 
 # Manual command gating: stop polls and wait a strict gap after the last poll TX.
 manual_command_window_enabled = True
@@ -73,7 +76,6 @@ telemetry_frame_seen = {
     6: False,
 }
 
-        # Master-side telemetry poll: send once and do not wait for an ACK because it doesnt really matter if it gets through every time
 
 def update_log_names():
     global rx_file_name
@@ -305,11 +307,14 @@ def reset_telemetry_block_tracking():
 
 
 def mark_telemetry_frame(frame_id: int):
+    global awaiting_telemetry_block
+
     if frame_id in telemetry_frame_seen:
         telemetry_frame_seen[frame_id] = True
 
     if all(telemetry_frame_seen.values()):
         reset_telemetry_block_tracking()
+        awaiting_telemetry_block = False
 
 
 def queue_manual_command_after_telemetry(command: str, retries: int = COMMAND_MAX_RETRIES):
@@ -380,6 +385,8 @@ def queue_command_and_wait(command: str, retries: int = COMMAND_MAX_RETRIES, tim
 def command_worker_loop():
     global pending_command_ack
     global last_rs485_poll_sent
+    global last_poll_request_sent
+    global awaiting_telemetry_block
 
     while True:
         item = command_queue.get()
@@ -397,7 +404,11 @@ def command_worker_loop():
 
         # Poll commands ({00,5}) don't get ACK verification
         if command == POLL_RS485_COMMAND:
-            last_rs485_poll_sent = time.time()
+            poll_sent_time = time.time()
+            last_rs485_poll_sent = poll_sent_time
+            last_poll_request_sent = poll_sent_time
+            awaiting_telemetry_block = True
+            reset_telemetry_block_tracking()
             send_command(command)
             success = True
             if completion_result is not None:
@@ -469,6 +480,8 @@ def start_ecu_communication():
     global ecu_serial
     global ecu_char_read_buffer
     global last_rs485_poll
+    global awaiting_telemetry_block
+    global last_poll_request_sent
 
     main_thread = threading.main_thread()
     start_command_worker()
@@ -491,6 +504,8 @@ def start_ecu_communication():
                     ecu_serial.reset_output_buffer()
                     ecu_connected = True
                     last_rs485_poll = time.time()  # Reset poll timer on successful connection
+                    awaiting_telemetry_block = False
+                    last_poll_request_sent = 0.0
                     print(f"[ECU_TX] connected to {ecu_port} @ {ecu_baud}")
                     print(f"[ECU_TX] port open={ecu_serial.is_open} name={ecu_serial.port} DTR={ecu_serial.dtr} RTS={ecu_serial.rts}")
                 except Exception as connect_error:
@@ -525,14 +540,18 @@ def start_ecu_communication():
 
                 # Try polling the rs485 valves if that isn't disabled
                 try:
+                    now = time.time()
+                    telemetry_gate_open = (not awaiting_telemetry_block) or ((now - last_poll_request_sent) > TELEMETRY_BLOCK_TIMEOUT_S)
+
                     if (
                         rs485_poll_enabled
                         and not manual_command_pending_event.is_set()
                         and not command_in_flight.is_set()
                         and command_queue.empty()
-                        and (time.time() - last_rs485_poll) > 0.5
+                        and telemetry_gate_open
+                        and (now - last_rs485_poll) > 0.1
                     ):
-                        last_rs485_poll = time.time()
+                        last_rs485_poll = now
                         poll_rs485()
 
                 except Exception as e:

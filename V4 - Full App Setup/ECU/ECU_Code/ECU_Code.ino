@@ -378,7 +378,7 @@ void sendAck(int commandAddress, int commandInt) {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  LINK_SERIAL.begin(9600);
+  LINK_SERIAL.begin(115200);
   Serial3.begin(115200);
   Serial3.setTimeout(10);
   Wire.begin();

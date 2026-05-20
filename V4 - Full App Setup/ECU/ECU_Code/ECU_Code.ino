@@ -377,7 +377,9 @@ void updateRS485ValveAngles() {
 
     int v = -1, angle = -1;
     if (sscanf(buf, "{v,%d,%d}", &v, &angle) == 2) {
-      rs485ValveAngles[v - 12] = angle;
+      if (v >= 12 && v < 36) {
+        rs485ValveAngles[v - 12] = angle;
+      }
       // Serial.print("Got valve ");
       // Serial.print(v);
       // Serial.print(" angle ");
@@ -442,7 +444,7 @@ void updateRS485ValveAngles() {
 
 void printDesiredValveStates() {
   Serial.print("{1");
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 24; i++) {
     Serial.print(",");
     Serial.print(rs485ValveDesiredStates[i]);
   }

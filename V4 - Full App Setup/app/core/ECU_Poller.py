@@ -26,7 +26,7 @@ UPLOAD_ECU_SEQUENCE_START_COMMAND = "{0,32}"
 START_ECU_HARDCODED_LAUNCH_COMMAND = "{0,33}"
 ACK_COMMAND_PREFIX = "{7,"
 COMMAND_ACK_TIMEOUT_S = 0.35  # time to wait for an ACK before considering the command failed and retrying
-COMMAND_MAX_RETRIES = 5 # max number of times to retry a command before giving up and reporting failure
+COMMAND_MAX_RETRIES = 3 # max number of times to retry a command before giving up and reporting failure
 MANUAL_COMMAND_POST_POLL_GAP_S = 0.77 # after a poll command is sent, wait time to clear the line before sending command
 TELEMETRY_BLOCK_TIMEOUT_S = 2.0 # max time to wait for a full telemetry block before allowing another poll
 

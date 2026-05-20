@@ -46,8 +46,27 @@ def callback_send_command(sender, app_data, user_data):
 
 
 def callback_start_sequence(sender, app_data, user_data):
-    index = sequence_executer.get_names().index(dpg.get_value(user_data))
-    sequence_executer.run_sequence(index)
+    selected_sequence = dpg.get_value(user_data)
+    if selected_sequence not in sequence_executer.get_names():
+        print("[SEQUENCE] Select a valid sequence before starting.")
+        return
+
+    index = sequence_executer.get_names().index(selected_sequence)
+    sequence_executer.start_uploaded_sequence(index)
+
+
+def callback_upload_sequence(sender, app_data, user_data):
+    selected_sequence = dpg.get_value(user_data)
+    if selected_sequence not in sequence_executer.get_names():
+        print("[SEQUENCE] Select a valid sequence before uploading.")
+        return
+
+    index = sequence_executer.get_names().index(selected_sequence)
+    sequence_executer.upload_sequence(index)
+
+
+def callback_start_hardcoded_launch_sequence(sender, app_data, user_data):
+    sequence_executer.start_hardcoded_launch_sequence()
 
 
 def callback_stop_sequence():
@@ -257,10 +276,18 @@ def build():
             # dpg.add_text(default_value="7.7", pos=(150, 475), color=(255, 100, 100, 255))
 
         with dpg.group(pos=(900, 815)):
-            dpg.add_text("Run Sequence:")
+            dpg.add_button(label="Execute Launch Sequence", callback=callback_start_hardcoded_launch_sequence) # button for hardcoded sequence
+            dpg.add_text("Run Uploaded Sequence:")
             dpg.add_combo(["x", "s"], width=250, tag="main_tab_sequence_select")
             with dpg.group(horizontal=True):
-                dpg.add_button(label="Start", callback=callback_start_sequence, user_data="main_tab_sequence_select")
+                dpg.add_button(label="Upload", callback=callback_upload_sequence, user_data="main_tab_sequence_select")
+                dpg.add_button(
+                    label="Start",
+                    callback=callback_start_sequence,
+                    user_data="main_tab_sequence_select",
+                    tag="main_tab_sequence_start_button",
+                    enabled=False,
+                )
                 dpg.add_button(label="Cancel", callback=sequence_executer.cancel_sequence)
                 dpg.add_text("xx/102", tag="main_tab_step_number")
                 dpg.add_text("for 12.1s", tag="main_tab_step_time_left")

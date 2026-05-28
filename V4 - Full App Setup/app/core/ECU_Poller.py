@@ -5,6 +5,8 @@ import threading
 import time
 import serial
 from datetime import datetime
+from core import ECU_TC_Data
+from core import ECU_PT_Data
 
 ecu_port = "COM4"
 ecu_baud = 115200
@@ -86,6 +88,11 @@ def update_log_names():
     t = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     rx_file_name = this_file_dir.parent / "logs" / f"{t}_ECU_RX.csv"
     tx_file_name = this_file_dir.parent / "logs" / f"{t}_ECU_TX.csv"
+    start_time = time.time()
+    ECU_TC_Data.set_start_time(start_time)
+    ECU_PT_Data.set_start_time(start_time)
+    ECU_TC_Data.update_log_name(this_file_dir.parent / "logs", t)
+    ECU_PT_Data.update_log_name(this_file_dir.parent / "logs", t)
 
 
 def write_headers():
@@ -100,6 +107,9 @@ def write_headers():
             for i in range(len(ecu_valve_locations)):
                 f.write(f"{i},{ecu_valve_locations[i]}\n")
             f.write("#======#\n")
+
+    ECU_TC_Data.write_headers()
+    ECU_PT_Data.write_headers()
 
 
 def update_valve_locations(new_locations):
@@ -119,6 +129,11 @@ def update_port_settings(port: str, baud: int):
     ecu_baud = baud
 
     ecu_connected = False
+
+
+def update_ecu_sensor_config(pt_enabled, pt_locations, tc_enabled, tc_locations, pt_mappings=None):
+    ECU_PT_Data.update_config(pt_enabled, pt_locations, mappings=pt_mappings)
+    ECU_TC_Data.update_config(tc_enabled, tc_locations)
 
 
 def get_valve_locations():
@@ -636,11 +651,15 @@ def process_command(command: str):
             pass
 
     if command.startswith("{5,") and command.endswith("}"):
+        ECU_PT_Data.parse_pt_frame(command)
         mark_telemetry_frame(5)
 
     if command.startswith("{6,") and command.endswith("}"):
+        ECU_TC_Data.parse_tc_frame(command)
         mark_telemetry_frame(6)
 
+
+ecu_consecutive_write_failures = 0
 
 ecu_consecutive_write_failures = 0
 
@@ -721,3 +740,27 @@ def get_pyro_channel_states():
 
 def get_rs485_valve_percentages():
     return ecu_rs485_valve_percentages
+
+
+def get_ecu_tc_data(seconds: float, tc_index: int = 0, junction: str = "hot"):
+    return ECU_TC_Data.get_data(seconds, tc_index=tc_index, junction=junction)
+
+
+def get_ecu_tc_active_channels():
+    return ECU_TC_Data.get_active_channels()
+
+
+def get_ecu_tc_locations():
+    return ECU_TC_Data.get_sensor_locations()
+
+
+def get_ecu_pt_data(seconds: float, pt_index: int = 0):
+    return ECU_PT_Data.get_data(seconds, pt_index=pt_index)
+
+
+def get_ecu_pt_active_channels():
+    return ECU_PT_Data.get_active_channels()
+
+
+def get_ecu_pt_locations():
+    return ECU_PT_Data.get_sensor_locations()

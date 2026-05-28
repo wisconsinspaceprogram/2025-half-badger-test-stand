@@ -661,6 +661,8 @@ def process_command(command: str):
 
 ecu_consecutive_write_failures = 0
 
+ecu_consecutive_write_failures = 0
+
 def send_command(command: str):
     global ecu_connected
     global ecu_command_sent_list

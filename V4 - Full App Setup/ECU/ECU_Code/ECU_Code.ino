@@ -134,16 +134,25 @@ int ecuUploadedSequenceCount = 0;
 bool ecuSequenceUploadInProgress = false;
 
 // ECU hardcoded launch sequence.
-// NEED TO UPDATES THIS BEFORE WE LAUNCH.
+// NEED TO VERIFIED BEFORE WE LAUNCH.
 const EcuSequenceStep ecuHardcodedLaunchSequence[] = {
-  { ECU_SEQUENCE_ACTION_WAIT, 0, 500 },
-  { ECU_SEQUENCE_ACTION_OPEN, 16, 0 },
-  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
-  { ECU_SEQUENCE_ACTION_CLOSE, 16, 0 },
-  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
-  { ECU_SEQUENCE_ACTION_OPEN, 16, 0 },
-  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 },
-  { ECU_SEQUENCE_ACTION_CLOSE, 16, 0 },
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 2000 }, // WAIT 2s
+  { ECU_SEQUENCE_ACTION_FIRE, 0, 0 }, // fire pyro channel 0 
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 }, // WAIT 1s
+  { ECU_SEQUENCE_ACTION_OPEN, 21, 0 }, // open LOX Main
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 150}, // WAIT 0.150s
+  { ECU_SEQUENCE_ACTION_OPEN, 14, 0 }, // open IPA Main
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 7000 }, // 7s HOT FIRE
+  { ECU_SEQUENCE_ACTION_CLOSE, 21, 0 }, // close LOX Main
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 1000 }, // WAIT 1s
+  { ECU_SEQUENCE_ACTION_CLOSE, 14, 0 }, // close IPA Main
+
+  {ECU_SEQUENCE_ACTION_WAIT, 0, 8000 }, // WAIT 8s
+  {ECU_SEQUENCE_ACTION_OPEN, 20, 0 }, // open LOX Dump
+
+  { ECU_SEQUENCE_ACTION_WAIT, 0, 5000 }, // WAIT 5s
+  { ECU_SEQUENCE_ACTION_OPEN, 17, 0 }, // OPEN IPA VENT
+  { ECU_SEQUENCE_ACTION_OPEN, 19, 0 }, // OPEN LOX VENT
 };
 const int ecuHardcodedLaunchSequenceCount = sizeof(ecuHardcodedLaunchSequence) / sizeof(ecuHardcodedLaunchSequence[0]);
 
@@ -644,7 +653,8 @@ void loop() {
     // Read sensors only when the app asks for telemetry.
     for (int i = 0; i < (sizeof(ptPins) / sizeof(ptPins[0])); i++)
     {
-      ptValue[i] = (analogRead(ptPins[i]) / 1023.0 * 5.0 - ptOutputRange[i][0]) / (ptOutputRange[i][1] - ptOutputRange[i][0]) * (ptPressureRange[i][1] - ptPressureRange[i][0]) + ptPressureRange[i][0];
+      // Send raw PT voltage to the app; mapping to engineering units happens in the GUI config.
+      ptValue[i] = analogRead(ptPins[i]) / 1023.0 * 5.0;
     }
 
     for (int i = 0; i < (sizeof(tcAddress) / sizeof(tcAddress[0])); i++)
@@ -703,14 +713,22 @@ void updateRS485ValveAngles() {
     }
 
 
-    int len = Serial3.readBytesUntil('}', buf, sizeof(buf) - 1);
+    int len = Serial3.readBytesUntil('}', buf, sizeof(buf) - 2);
+    if (len <= 0) {
+      continue;
+    }
     buf[len] = '}';
     buf[len + 1] = '\0';
     // Serial.println("B");
     // Serial.println(buf);
 
     int v = -1, angle = -1;
-    if (sscanf(buf, "{v,%d,%d}", &v, &angle) == 2) {
+    int parsed = sscanf(buf, "{v,%d,%d}", &v, &angle);
+    if (parsed != 2) {
+      parsed = sscanf(buf, "{v%d,%d}", &v, &angle);
+    }
+
+    if (parsed == 2 && v >= 12 && v <= 35) {
       rs485ValveAngles[v - 12] = angle;
       // Serial.print("Got valve ");
       // Serial.print(v);
@@ -823,7 +841,7 @@ void printPTReadings() {
 void printTCReadings() {
   LINK_SERIAL.print("{6");
   // Support adding more PTs without changing code
-  for (int i = 0; i < sizeof(tcAddress)/sizeof(tcAddress); i++) {
+  for (int i = 0; i < sizeof(tcAddress)/sizeof(tcAddress[0]); i++) {
     LINK_SERIAL.print(",");
     LINK_SERIAL.print(tcHotValue[i]);
     LINK_SERIAL.print(",");

@@ -548,7 +548,7 @@ int main(void)
 	      }
 
 	      // Target hit
-	      if (abs(error) < config.errorTol && rolling_delta_error * 10 < config.errorTolChange){
+	      if (abs(error) < config.errorTol && abs(rolling_delta_error * 10) < config.errorTolChange){
 	    	  target_hit = 1;
 	    	  speed = 0;
 	      }

@@ -98,11 +98,11 @@ def make_pnid_valve_icons(location: str, start: tuple, offset: tuple):
 
 
 def get_possible_valve_locations():
-    return possible_valve_locations
+    return [loc for loc in possible_valve_locations if loc not in ("Custom", "-")]
 
 
 def get_possible_sensor_locations():
-    return possible_sensor_locations
+    return [loc for loc in possible_sensor_locations if loc not in ("Custom", "-")]
 
 
 def build():

@@ -1,5 +1,5 @@
 import dearpygui.dearpygui as dpg
-from gui import T7_daq_config, T7_pro_daq_config, U6_pro_daq_config
+from gui import T7_daq_config, T7_pro_daq_config, U6_pro_daq_config, ECU_sensor_config
 
 
 def build():
@@ -7,9 +7,11 @@ def build():
         T7_daq_config.build()
         T7_pro_daq_config.build()
         U6_pro_daq_config.build()
+        ECU_sensor_config.build()
 
 
 def load_defaults():
     T7_daq_config.load_defaults()
     T7_pro_daq_config.load_defaults()
     U6_pro_daq_config.load_defaults()
+    ECU_sensor_config.load_defaults()

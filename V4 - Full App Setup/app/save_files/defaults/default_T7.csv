@@ -6,10 +6,10 @@ False,Thermocouple Type K,Combustion Chamber,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,Combustion Chamber,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,Combustion Chamber,,0.0,10.0,0.0,1000.0
 False,Thermocouple Type K,LOX Venturi,,0.0,10.0,0.0,1000.0
-True,Load Cell,Combustion Chamber,,-1.0,1.0,-1296.0,1296.0
+False,Load Cell,Combustion Chamber,,-1.0,1.0,-1296.0,1296.0
 False,Pressure Transducer,Custom,Air Reg in,1.0,5.0,0.0,5000.0
-True,Pressure Transducer,Combustion Chamber,,0.0,10.0,0.0,1500.0
-True,Pressure Transducer,LOX Manifold,,0.0,10.0,0.0,1500.0
-True,Pressure Transducer,LOX Tank Top,Air Reg out,1.0,5.0,0.0,5000.0
-True,Pressure Transducer,LOX Venturi,,0.0,10.0,0.0,1500.0
-True,Pressure Transducer,IPA Tank Bottom,,0.0,10.0,0.0,1500.0
+False,Pressure Transducer,Combustion Chamber,,0.0,10.0,0.0,1500.0
+False,Pressure Transducer,LOX Manifold,,0.0,10.0,0.0,1500.0
+False,Pressure Transducer,LOX Tank Top,Air Reg out,1.0,5.0,0.0,5000.0
+False,Pressure Transducer,LOX Venturi,,0.0,10.0,0.0,1500.0
+False,Pressure Transducer,IPA Tank Bottom,,0.0,10.0,0.0,1500.0

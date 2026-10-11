@@ -306,6 +306,59 @@ def update_thread():
                     if not ((i + 1) in active_channels) and dpg.does_item_exist(f"U6p_CH{i+1}_main_plot"):
                         dpg.delete_item(f"U6p_CH{i+1}_main_plot")
 
+                ecu_pt_active_channels = ECU_Poller.get_ecu_pt_active_channels()
+                ecu_pt_locations = ECU_Poller.get_ecu_pt_locations()
+                lookback_s = max(dpg.get_value("main_tab_seconds_lookback"), 1)
+
+                for i in range(len(ecu_pt_active_channels)):
+                    channel = ecu_pt_active_channels[i]
+                    series_tag = f"ECU_PT{channel}_main_plot"
+
+                    if not dpg.does_item_exist(series_tag):
+                        dpg.add_line_series(
+                            [],
+                            [],
+                            label=ecu_pt_locations[i],
+                            parent="y_axis_psi",
+                            tag=series_tag,
+                            show=True,
+                        )
+
+                    ecu_pt_data = ECU_Poller.get_ecu_pt_data(lookback_s, pt_index=channel - 1)
+                    dpg.set_value(series_tag, ecu_pt_data)
+                    dpg.configure_item(series_tag, label=ecu_pt_locations[i])
+
+                for channel in range(1, 5):
+                    series_tag = f"ECU_PT{channel}_main_plot"
+                    if channel not in ecu_pt_active_channels and dpg.does_item_exist(series_tag):
+                        dpg.delete_item(series_tag)
+
+                ecu_tc_active_channels = ECU_Poller.get_ecu_tc_active_channels()
+                ecu_tc_locations = ECU_Poller.get_ecu_tc_locations()
+
+                for i in range(len(ecu_tc_active_channels)):
+                    channel = ecu_tc_active_channels[i]
+                    series_tag = f"ECU_TC{channel}_hot_main_plot"
+
+                    if not dpg.does_item_exist(series_tag):
+                        dpg.add_line_series(
+                            [],
+                            [],
+                            label=ecu_tc_locations[i],
+                            parent="y_axis_c",
+                            tag=series_tag,
+                            show=True,
+                        )
+
+                    ecu_tc_data = ECU_Poller.get_ecu_tc_data(lookback_s, tc_index=channel - 1, junction="hot")
+                    dpg.set_value(series_tag, ecu_tc_data)
+                    dpg.configure_item(series_tag, label=ecu_tc_locations[i])
+
+                for channel in range(1, 5):
+                    series_tag = f"ECU_TC{channel}_hot_main_plot"
+                    if channel not in ecu_tc_active_channels and dpg.does_item_exist(series_tag):
+                        dpg.delete_item(series_tag)
+
             # Updating the ECU data every 0.05 seconds
             if cur_time - last_main_ecu_update > 0.05:
                 last_main_ecu_update = cur_time
@@ -316,15 +369,18 @@ def update_thread():
                 pyro_states = ECU_Poller.get_pyro_channel_states()
 
                 rs485_percentages = ECU_Poller.get_rs485_valve_percentages()  # gets values from ECU_Poller
-                for i in range(24):
-                    tag = f"rs485_valve_{i+12}"  # gives each value a unique tag
-                    if dpg.does_item_exist(tag):
-                        dpg.set_value(tag, f"{rs485_percentages[i]}%")  # sets the value of each tag to the corresponding percentage value
 
                 valve_tags = main_tab.get_pnid_valve_tags()
 
                 for i in range(0, 36):
                     dpg.set_value(f"valve_loc_{i}", valve_locations[i])
+
+                    percent_tag = f"rs485_valve_{i}"
+                    if dpg.does_item_exist(percent_tag):
+                        if 12 <= i <= 35 and (i - 12) < len(rs485_percentages):
+                            dpg.set_value(percent_tag, f"{rs485_percentages[i - 12]}%")
+                        else:
+                            dpg.set_value(percent_tag, "-")
 
                     # Getting the tags of the on PNID states
                     valve_tag = f"PNID_{valve_locations[i].lower()}_valve"
@@ -417,5 +473,21 @@ def update_thread():
                     value = T7_poller.get_last_value(channel)
 
                     dpg.set_value(f"reading_T7_CH{channel}", f"{value:.2f} {channel_unit}")
+
+                for channel in range(1, 5):
+                    dpg.set_value(f"reading_ECU_PT{channel}", "-")
+                    dpg.set_value(f"reading_ECU_TC{channel}", "-")
+
+                ecu_pt_active_channels = ECU_Poller.get_ecu_pt_active_channels()
+                for channel in ecu_pt_active_channels:
+                    ecu_pt_data = ECU_Poller.get_ecu_pt_data(1, pt_index=channel - 1)
+                    if len(ecu_pt_data[1]) > 0:
+                        dpg.set_value(f"reading_ECU_PT{channel}", f"{ecu_pt_data[1][0]:.2f} psi")
+
+                ecu_tc_active_channels = ECU_Poller.get_ecu_tc_active_channels()
+                for channel in ecu_tc_active_channels:
+                    ecu_tc_data = ECU_Poller.get_ecu_tc_data(1, tc_index=channel - 1, junction="hot")
+                    if len(ecu_tc_data[1]) > 0:
+                        dpg.set_value(f"reading_ECU_TC{channel}", f"{ecu_tc_data[1][0]:.2f} C")
 
         time.sleep(0.01)

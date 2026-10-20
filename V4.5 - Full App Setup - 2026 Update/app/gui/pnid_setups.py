@@ -190,3 +190,91 @@ def build_nov_9_hotfire_setup():
     ]
 
     return pnid_data_tags, pnid_valve_tags, valve_locs, sensor_locs
+
+
+def build_fall_2026_setup():
+    pnid_data_tags = []
+    pnid_valve_tags = []
+
+    width, height, channels, data = dpg.load_image(str(Path(__file__).parents[1] / "assets" / "images" / "pnid_2026.png"))
+
+    with dpg.texture_registry(show=False):
+        dpg.add_static_texture(width=width, height=height, default_value=data, tag="P&ID Image")
+
+    pnid_location = (0, 0)
+    _reset_layout()
+    _add_pnid_image("P&ID Image", pnid_location)
+    pnid_data_tags.extend(make_data_stack("GN2 Bottle", (360, 72), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Tank Top", (210, 127), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Tank Bottom", (210, 303), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Venturi Inlet", (126, 356), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Venturi Throat", (126, 397), pnid_location, count=2, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Venturi Outlet", (126, 436), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("LOX Manifold", (215, 555), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Tank Top", (434, 127), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Tank Bottom", (512, 303), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Venturi Inlet", (518, 356), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Venturi Throat", (518, 397), pnid_location, count=2, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Venturi Outlet", (518, 436), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("IPA Manifold", (436, 555), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("Purge Bottle", (360, 293), pnid_location, count=3, up=False))
+    pnid_data_tags.extend(make_data_stack("Combustion Chamber", (410, 599), pnid_location, count=2, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 1", (240, 598), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 2", (240, 614), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 3", (240, 630), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 4", (240, 646), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 5", (240, 662), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("TCA 6", (240, 678), pnid_location, count=1, up=False))
+    pnid_data_tags.extend(make_data_stack("Custom", (12, 545), pnid_location, count=15, up=False))
+
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Press", (262.5, 17.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("IPA Press", (412.5, 17.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Tank Vent", (97.5, 82.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("IPA Tank Vent", (577.5, 82.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Fill", (127.5, 295.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Fill Vent", (47.5, 277.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Main", (217.5, 477.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("IPA Main", (457.5, 477.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("LOX Purge", (227.5, 367.5), pnid_location))
+    pnid_valve_tags.extend(make_pnid_valve_icons("IPA Purge", (447.5, 367.5), pnid_location))
+
+    valve_locs = [
+        "LOX Press",
+        "IPA Press",
+        "LOX Tank Vent",
+        "IPA Tank Vent",
+        "LOX Fill",
+        "LOX Fill Vent",
+        "LOX Main",
+        "IPA Main",
+        "LOX Purge",
+        "IPA Purge",
+        "Not Connected",
+    ]
+    sensor_locs = [
+        "GN2 Bottle",
+        "LOX Tank Top",
+        "LOX Tank Bottom",
+        "LOX Venturi Inlet",
+        "LOX Venturi Throat",
+        "LOX Venturi Outlet",
+        "LOX Manifold",
+        "IPA Tank Top",
+        "IPA Tank Bottom",
+        "IPA Venturi Inlet",
+        "IPA Venturi Throat",
+        "IPA Venturi Outlet",
+        "IPA Manifold",
+        "Purge Bottle",
+        "Combustion Chamber",
+        "TCA 1",
+        "TCA 2",
+        "TCA 3",
+        "TCA 4",
+        "TCA 5",
+        "TCA 6",
+        "Custom",
+        "Not Connected",
+    ]
+
+    return pnid_data_tags, pnid_valve_tags, valve_locs, sensor_locs

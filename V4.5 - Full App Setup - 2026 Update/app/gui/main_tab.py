@@ -232,7 +232,8 @@ def build():
                 with dpg.child_window(tag="main_tab_pnid_panel", width=700, height=700, border=False, no_scrollbar=True):
                     # Build the desired PNID setup (positions are relative to this panel)
                     # pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_full_setup()
-                    pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_nov_9_hotfire_setup()
+                    # pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_nov_9_hotfire_setup()
+                    pnid_data_tags, pnid_valve_tags, possible_valve_locations, possible_sensor_locations = pnid_setups.build_fall_2026_setup()
 
                 with dpg.group(horizontal=True, horizontal_spacing=GAP):
                     # ---- ECU console ----

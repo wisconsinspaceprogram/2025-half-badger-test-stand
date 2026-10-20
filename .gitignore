@@ -1,2 +1,9 @@
 Control App/__pycache__/TextInput.cpython-310.pyc
 *.pyc
+
+# STM32CubeIDE / Eclipse workspace data
+.metadata
+
+# STM32CubeIDE build output
+Debug/
+Release/

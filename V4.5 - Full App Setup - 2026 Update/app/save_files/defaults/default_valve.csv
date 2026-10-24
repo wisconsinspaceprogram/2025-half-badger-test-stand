@@ -1,4 +1,4 @@
-COM7,115200
+COM12,115200,
 0,Not Connected,Not Connected
 1,IPA Tank Vent,LOX Tank Vent
 2,IPA Press,LOX Fill

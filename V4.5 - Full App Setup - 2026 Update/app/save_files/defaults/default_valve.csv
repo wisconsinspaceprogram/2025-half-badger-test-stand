@@ -1,22 +1,22 @@
 COM7,115200
 0,Not Connected,Not Connected
-1,LOX Tank Vent,LOX Tank Vent
-2,LOX Fill,LOX Fill
-3,LOX Fill Vent,LOX Fill Vent
-4,LOX Main,LOX Main
-5,Not Connected,Not Connected
+1,IPA Tank Vent,LOX Tank Vent
+2,IPA Press,LOX Fill
+3,LOX Press,LOX Fill Vent
+4,IPA Purge,LOX Main
+5,LOX Purge,Not Connected
 6,Not Connected,Not Connected
 7,Not Connected,Not Connected
 8,Not Connected,Not Connected
 9,Not Connected,Not Connected
-10,Not Connected,Not Connected
-11,Not Connected,Not Connected
-12,LOX Purge,LOX Purge
-13,IPA Purge,IPA Purge
-14,GN2 Main,GN2 Main
-15,IPA Tank Vent,IPA Tank Vent
-16,IPA Fill Dump,IPA Fill Dump
-17,IPA Main,IPA Main
+10,LOX Tank Vent,Not Connected
+11,LOX Fill,Not Connected
+12,LOX Fill Vent,LOX Purge
+13,LOX Main,IPA Purge
+14,IPA Main,GN2 Main
+15,Not Connected,IPA Tank Vent
+16,Not Connected,IPA Fill Dump
+17,Not Connected,IPA Main
 18,Not Connected,Not Connected
 19,Not Connected,Not Connected
 20,Not Connected,Not Connected

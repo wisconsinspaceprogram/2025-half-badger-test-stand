@@ -131,3 +131,49 @@ Wait,,,,1.0
 Open,IPA Fill Dump,,,0.0
 Wait,,,,1.0
 Close,IPA Fill Dump,,,0.0
+###
+IPA Flow 4s
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,,,,0.25
+Open,IPA Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,2.0
+Close,IPA Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+###
+LOX Flow 4s
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,,,,0.25
+Open,LOX Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,2.0
+Close,LOX Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+###
+LOX/IPA Flow 4s
+Wait,,,,0.5
+Poll,,,,0.0
+Wait,,,,0.25
+Open,LOX Main,,,0.0
+Wait,,,,0.0
+Open,IPA Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0
+Wait,,,,2.0
+Close,LOX Main,,,0.0
+Wait,,,,0.0
+Close,IPA Main,,,0.0
+Wait,,,,1.0
+Poll,,,,0.0

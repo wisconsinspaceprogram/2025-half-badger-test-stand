@@ -204,7 +204,7 @@ def build():
                     dpg.add_table_column(label="Status")
                     dpg.add_table_column(label="%")
 
-                    for i in range(0, 36):
+                    for i in range(0, 24):
                         with dpg.table_row():
                             dpg.add_text(str(i))
                             dpg.add_text("Valve " + str(i), tag="valve_loc_" + str(i))

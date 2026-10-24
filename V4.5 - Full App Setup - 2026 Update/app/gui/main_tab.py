@@ -71,17 +71,7 @@ def callback_start_sequence(sender, app_data, user_data):
         return
 
     index = sequence_executer.get_names().index(selected_sequence)
-    sequence_executer.start_uploaded_sequence(index)
-
-
-def callback_upload_sequence(sender, app_data, user_data):
-    selected_sequence = dpg.get_value(user_data)
-    if selected_sequence not in sequence_executer.get_names():
-        print("[SEQUENCE] Select a valid sequence before uploading.")
-        return
-
-    index = sequence_executer.get_names().index(selected_sequence)
-    sequence_executer.upload_sequence(index)
+    sequence_executer.run_sequence(index)
 
 
 def callback_start_hardcoded_launch_sequence(sender, app_data, user_data):
@@ -311,10 +301,9 @@ def build():
                             width=-1,
                             callback=callback_start_hardcoded_launch_sequence,
                         )  # button for hardcoded sequence
-                        dpg.add_text("Run Uploaded Sequence:")
+                        dpg.add_text("Run Sequence:")
                         dpg.add_combo(["x", "s"], width=-1, tag="main_tab_sequence_select")
                         with dpg.group(horizontal=True):
-                            dpg.add_button(label="Upload", callback=callback_upload_sequence, user_data="main_tab_sequence_select")
                             dpg.add_button(
                                 label="Start",
                                 callback=callback_start_sequence,

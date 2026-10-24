@@ -1,15 +1,28 @@
+"""Runs sequences from the PC, one step at a time.
+
+The V4.5 ECU firmware only understands single commands (open / close / fire / poll), so the
+sequence is stepped through here and each step is sent as a normal command, exactly like the
+manual buttons on the main tab. Wait steps are timed against the sequence start time, so small
+delays from sending commands don't add up over a long sequence.
+"""
 import threading
 import time
+
 from core import ECU_Poller
 
 sequence_names = []
 sequences = []
+
+HARDCODED_SEQUENCE_SENTINEL = -2
+
+_lock = threading.Lock()
+_pending = None            # (index, resolved steps) waiting for the runner thread
+_cancel = threading.Event()
+
 active_sequence_index = -1
 active_sequence_step = -1
-next_step_time = 0
-pending_sequence_mode = ""
-uploaded_sequence_index = -1
-HARDCODED_SEQUENCE_SENTINEL = -2
+active_sequence_length = 0
+next_step_time = 0.0
 
 
 def update_sequence_steps(new_sequnces):
@@ -30,184 +43,168 @@ def get_names():
     return sequence_names
 
 
-def is_sequence_uploaded(sequence_index: int):
-    return uploaded_sequence_index == sequence_index
+def is_running():
+    return active_sequence_index != -1 or _pending is not None
 
 
-def _queue_sequence_request(sequence_index: int, mode: str):
-    global active_sequence_index
-    global active_sequence_step
-    global next_step_time
-    global pending_sequence_mode
+# ---------------------------------------------------------------- building the step list
+def _resolve_steps(sequence_steps):
+    """Turn the saved steps into (action, target, seconds) tuples, checking every valve
+    name against the current valve map BEFORE anything is sent."""
+    out = []
+    for i, step in enumerate(sequence_steps):
+        action, valve_location, custom_location, pyro_channel, delay_seconds = step[:5]
 
-    if active_sequence_index == -1:
-        active_sequence_index = sequence_index
-        active_sequence_step = 0
-        next_step_time = time.time()
-        pending_sequence_mode = mode
+        if action in ("Open", "Close"):
+            location = custom_location if valve_location == "Custom" and custom_location else valve_location
+            index = ECU_Poller.get_valve_index(location)
+            if index < 0 or location in ("", "Not Connected"):
+                raise ValueError(f"step {i + 1}: '{location}' is not in the valve map "
+                                 f"(Valve Config tab). Fix the sequence or the valve map.")
+            out.append((action, index, location))
 
-        ECU_Poller.set_poll_rs485(False)
-        return True
+        elif action == "Wait":
+            seconds = max(0.0, float(delay_seconds or 0))
+            out.append(("Wait", seconds, ""))
 
-    return False
+        elif action == "Fire":
+            pyro_index = 0
+            if isinstance(pyro_channel, str) and pyro_channel.startswith("Pyro "):
+                pyro_index = int(pyro_channel.split(" ")[1])
+            out.append(("Fire", pyro_index, ""))
+
+        elif action == "Poll":
+            out.append(("Poll", 0, ""))
+
+        else:
+            raise ValueError(f"step {i + 1}: unsupported action '{action}'")
+    return out
 
 
+# ---------------------------------------------------------------- called from the GUI
 def run_sequence(sequence_index: int):
-    return _queue_sequence_request(sequence_index, "upload_and_start")
-
-
-def upload_sequence(sequence_index: int):
-    return _queue_sequence_request(sequence_index, "upload_only")
-
-
-def start_uploaded_sequence(sequence_index: int):
-    if uploaded_sequence_index != sequence_index:
-        print("[SEQUENCE] Selected sequence has not been uploaded. Upload it before starting.")
+    """Start the sequence now. Returns False (and prints why) if it can't start."""
+    global _pending
+    if is_running():
+        print("[SEQUENCE] A sequence is already running. Cancel it first.")
+        return False
+    if not (0 <= sequence_index < len(sequences)):
+        print(f"[SEQUENCE] Invalid sequence index: {sequence_index}")
+        return False
+    if not ECU_Poller.ecu_connected:
+        print("[SEQUENCE] ECU is not connected - sequence not started.")
+        return False
+    try:
+        steps = _resolve_steps(sequences[sequence_index])
+    except ValueError as e:
+        print(f"[SEQUENCE] '{sequence_names[sequence_index]}' not started: {e}")
+        return False
+    if not steps:
+        print("[SEQUENCE] Sequence is empty.")
         return False
 
-    return _queue_sequence_request(sequence_index, "start_only")
+    _cancel.clear()
+    with _lock:
+        _pending = (sequence_index, steps)
+    return True
 
 
 def start_hardcoded_launch_sequence():
-    return _queue_sequence_request(HARDCODED_SEQUENCE_SENTINEL, "start_hardcoded")
+    # The V4 ECU had a launch sequence built into its firmware (command 33). The V4.5 ECU
+    # firmware doesn't, so there is nothing to start.
+    print("[SEQUENCE] The V4.5 ECU firmware has no built-in launch sequence. "
+          "Make it a sequence on the Sequences tab and run it with Start instead.")
+    return False
 
 
-def cancel_sequence():
-    global active_sequence_index
-    global active_sequence_step
-    global pending_sequence_mode
-
-    active_sequence_index = -1
-    active_sequence_step = -1
-    pending_sequence_mode = ""
+def cancel_sequence(*_):
+    if is_running():
+        print("[SEQUENCE] Cancel requested.")
+    _cancel.set()
 
 
 def get_sequence_step():
-    return active_sequence_step
+    return max(active_sequence_step, 0)
 
 
 def get_sequence_length():
-    try:
-        if active_sequence_index >= 0:
-            return len(sequences[active_sequence_index])
-        else:
-            return 0
-    except:
-        return 0
+    return active_sequence_length
 
 
 def get_time_till_next_step():
     if active_sequence_index != -1:
-        return next_step_time - time.time()
+        return max(0.0, next_step_time - time.time())
     return 0
 
 
-def _build_ecu_upload_steps(sequence_steps):
-    out_steps = []
+# ---------------------------------------------------------------- runner thread
+def _wait_until(deadline):
+    """Sleep until `deadline` (time.time()), waking early on cancel. Returns False if cancelled."""
+    while True:
+        if _cancel.is_set():
+            return False
+        left = deadline - time.time()
+        if left <= 0:
+            return True
+        time.sleep(min(0.01, left))
 
-    for i, step in enumerate(sequence_steps):
-        action_name = step[0]
-        valve_location = step[1]
-        custom_valve_location = step[2]
-        pyro_channel = step[3]
-        delay_seconds = step[4]
 
-        if action_name == "Open" or action_name == "Close":
-            requested_location = valve_location
-            if requested_location == "Custom" and custom_valve_location != "":
-                requested_location = custom_valve_location
+def _run(index, steps):
+    global active_sequence_index, active_sequence_step, active_sequence_length, next_step_time
 
-            loc_index = ECU_Poller.get_valve_index(requested_location)
-            if loc_index < 12 or loc_index > 35:
-                raise ValueError(f"Invalid valve location at step {i}: {requested_location}")
+    name = sequence_names[index] if index < len(sequence_names) else str(index)
+    active_sequence_index = index
+    active_sequence_length = len(steps)
+    ECU_Poller.set_poll_rs485(False)      # the sequence's own Poll steps decide when to poll
+    print(f"[SEQUENCE] Started '{name}' ({len(steps)} steps)")
 
-            action_id = 1 if action_name == "Open" else 2
-            out_steps.append((action_id, loc_index, 0))
+    t_step = time.time()
+    try:
+        for i, (action, target, label) in enumerate(steps):
+            if _cancel.is_set():
+                print(f"[SEQUENCE] '{name}' cancelled before step {i + 1}")
+                return
+            active_sequence_step = i + 1
 
-        elif action_name == "Wait":
-            wait_ms = int(float(delay_seconds) * 1000.0)
-            if wait_ms < 0:
-                wait_ms = 0
-            if wait_ms > 60000:
-                wait_ms = 60000
-            out_steps.append((3, 0, wait_ms))
+            if action == "Wait":
+                t_step += target
+                next_step_time = t_step
+                if not _wait_until(t_step):
+                    print(f"[SEQUENCE] '{name}' cancelled during step {i + 1}")
+                    return
+                continue
 
-        elif action_name == "Fire":
-            pyro_index = 0
-            if isinstance(pyro_channel, str) and pyro_channel.startswith("Pyro "):
-                pyro_index = int(pyro_channel.split(" ")[1])
-            out_steps.append((4, pyro_index, 0))
+            next_step_time = time.time()
+            if action == "Open":
+                ECU_Poller.open_valve(target)
+            elif action == "Close":
+                ECU_Poller.close_valve(target)
+            elif action == "Fire":
+                ECU_Poller.fire_pyro(target)
+            elif action == "Poll":
+                ECU_Poller.poll_rs485()
+            print(f"[SEQUENCE] step {i + 1}/{len(steps)}: {action} {label or target}")
 
-        elif action_name == "Poll":
-            out_steps.append((5, 0, 0))
-
-        else:
-            raise ValueError(f"Unsupported action for ECU upload at step {i}: {action_name}")
-
-    return out_steps
+        print(f"[SEQUENCE] '{name}' finished")
+    except Exception as e:
+        print(f"[SEQUENCE] '{name}' stopped by an error: {e}")
+    finally:
+        active_sequence_index = -1
+        active_sequence_step = -1
+        active_sequence_length = 0
+        ECU_Poller.set_poll_rs485(True)
 
 
 def start_sequence_runner():
-    global active_sequence_index
-    global active_sequence_step
-    global pending_sequence_mode
-    global uploaded_sequence_index
-
+    global _pending
     main_thread = threading.main_thread()
 
     while main_thread.is_alive():
-        if active_sequence_index != -1:
-            try:
-                if active_sequence_index >= len(sequences) and pending_sequence_mode != "start_hardcoded":
-                    raise ValueError(f"Invalid active sequence index: {active_sequence_index}")
-
-                request_mode = pending_sequence_mode or "upload_and_start"
-
-                if request_mode in ("upload_only", "upload_and_start"):
-                    ecu_steps = _build_ecu_upload_steps(sequences[active_sequence_index])
-                    uploaded_sequence_index = -1
-
-                    upload_result = ECU_Poller.upload_sequence_blocking(ecu_steps)
-
-                    if not upload_result.get("success", False):
-                        print(f"[SEQUENCE] ECU upload failed: {upload_result}")
-                    else:
-                        uploaded_sequence_index = active_sequence_index
-                        print(f"[SEQUENCE] ECU upload success. steps={upload_result.get('steps_uploaded', 0)}")
-
-                        if request_mode == "upload_and_start":
-                            start_result = ECU_Poller.start_uploaded_sequence_blocking()
-                            if not start_result.get("success", False):
-                                print(f"[SEQUENCE] ECU start failed: {start_result}")
-                            else:
-                                print("[SEQUENCE] ECU sequence started; resuming polling immediately.")
-                        else:
-                            print("[SEQUENCE] ECU sequence uploaded and ready to start.")
-
-                elif request_mode == "start_only":
-                    if uploaded_sequence_index != active_sequence_index:
-                        print("[SEQUENCE] Selected sequence has not been uploaded. Upload it before starting.")
-                    else:
-                        start_result = ECU_Poller.start_uploaded_sequence_blocking()
-                        if not start_result.get("success", False):
-                            print(f"[SEQUENCE] ECU start failed: {start_result}")
-                        else:
-                            print("[SEQUENCE] ECU sequence started; resuming polling immediately.")
-
-                elif request_mode == "start_hardcoded":
-                    start_result = ECU_Poller.start_hardcoded_launch_sequence_blocking()
-                    if not start_result.get("success", False):
-                        print(f"[SEQUENCE] ECU hardcoded launch start failed: {start_result}")
-                    else:
-                        print("[SEQUENCE] ECU hardcoded launch sequence started; resuming polling immediately.")
-
-            except Exception as e:
-                print(f"[SEQUENCE] Failed to process sequence request: {e}")
-            finally:
-                active_sequence_index = -1
-                active_sequence_step = -1
-                pending_sequence_mode = ""
-                ECU_Poller.set_poll_rs485(True)
-
-        else:
+        with _lock:
+            job, _pending = _pending, None
+            if job is not None:
+                globals()["active_sequence_index"] = job[0]   # no gap where is_running() is False
+        if job is None:
             time.sleep(0.01)
+            continue
+        _run(*job)

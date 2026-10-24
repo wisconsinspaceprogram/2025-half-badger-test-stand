@@ -393,10 +393,8 @@ def update_thread():
                 dpg.configure_item("main_tab_sequence_select", items=sequence_names)
 
                 selected_sequence = dpg.get_value("main_tab_sequence_select")
-                start_enabled = False
-                if selected_sequence in sequence_names:
-                    selected_index = sequence_names.index(selected_sequence)
-                    start_enabled = sequence_executer.is_sequence_uploaded(selected_index)
+                # Start is available whenever a sequence is selected and none is running
+                start_enabled = selected_sequence in sequence_names and not sequence_executer.is_running()
 
                 dpg.configure_item("main_tab_sequence_start_button", enabled=start_enabled)
                 dpg.set_value(
